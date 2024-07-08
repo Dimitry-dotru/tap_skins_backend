@@ -1,0 +1,11 @@
+# node moudules
+/node_modules
+/dist
+
+# env file
+.env
+.env.local
+
+# some user files
+users_data/*
+!users_data/default_pictures_user/
