@@ -48,6 +48,8 @@ export const authUser = async (req: Request, res: Response) => {
           user_id: user_id,
           last_daily_bonus_time_clicked: 0,
           invited_users: 0,
+          stamina: 1000,
+          last_online: 0
         });
 
         await newUser.save();
