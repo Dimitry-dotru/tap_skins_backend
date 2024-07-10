@@ -14,7 +14,6 @@ const weaponSchemaTemplate = {
 
 //! USER
 const userSchema = new mongoose.Schema({
-  experience: Number,
   balance_common: Number,
   ballance_purple: Number,
   user_id: Number,

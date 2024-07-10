@@ -36,20 +36,30 @@ export const authUser = async (req: Request, res: Response) => {
 
     // Сравниваем полученный хеш с ожидаемым
     if (calculated_hash === hash) {
-      console.log("Validated!")
+      console.log("Validated!");
       // вернем тут объект юзера
       const user_id = JSON.parse((parsed_data as any).user).id;
-      const user = await userModel.findOne({user_id});
+      const user = await userModel.findOne({ user_id });
       if (!user) {
         // создаем тут юзера
+        const newUser = new userModel({
+          balance_common: 0,
+          ballance_purple: 0,
+          user_id: user_id,
+          last_daily_bonus_time_clicked: 0,
+          invited_users: 0,
+        });
+
+        await newUser.save();
+        return res.status(200).json(newUser);
       }
-      res.status(200).json(user);
+      return res.status(200).json(user);
     } else {
       console.log("Invalid!");
       res.status(403).json({ success: false });
     }
   } catch (error) {
-    console.log("Invalid init data format");
-    res.status(400).json({ error: "Invalid init data format" });
+    console.log("Invalid init data format or error to create user");
+    res.status(400).json({ error: "Invalid init data format or error to create user" });
   }
 };
