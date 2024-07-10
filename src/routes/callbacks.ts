@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { createHmac } from "crypto";
 import { botToken } from "../index";
 import { parse } from "querystring";
+import { userModel } from "../config/mongoose";
 
 export const authUser = async (req: Request, res: Response) => {
   const init_data = req.body.initData;
@@ -36,10 +37,16 @@ export const authUser = async (req: Request, res: Response) => {
     // Сравниваем полученный хеш с ожидаемым
     if (calculated_hash === hash) {
       console.log("Validated!")
-      res.status(200).json({ valid: true });
+      // вернем тут объект юзера
+      const user_id = JSON.parse((parsed_data as any).user).id;
+      const user = await userModel.findOne({user_id});
+      if (!user) {
+        // создаем тут юзера
+      }
+      res.status(200).json(user);
     } else {
       console.log("Invalid!");
-      res.status(403).json({ valid: false });
+      res.status(403).json({ success: false });
     }
   } catch (error) {
     console.log("Invalid init data format");
