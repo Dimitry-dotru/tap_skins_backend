@@ -1,44 +1,18 @@
 import { Request, Response } from "express";
-import { createHmac } from "crypto";
-import { botToken } from "../index";
-import { parse } from "querystring";
 import { userModel } from "../config/mongoose";
+import { checkingInitData } from "../utils/functions";
+import { bot } from "../index";
 
 export const authUser = async (req: Request, res: Response) => {
   const init_data = req.body.initData;
 
   try {
-    const parsed_data = parse(init_data);
-    if (!parsed_data.hash) {
-      return res
-        .status(400)
-        .json({ error: "Hash is not present in init data" });
-    }
+    const userInfo = checkingInitData(init_data, res) as any;
 
-    const hash = parsed_data.hash;
-    delete parsed_data.hash;
-
-    // Строка для проверки данных
-    const data_check_string = Object.keys(parsed_data)
-      .sort()
-      .map((key) => `${key}=${parsed_data[key]}`)
-      .join("\n");
-
-    // Создаем секретный ключ для HMAC
-    const secret_key = createHmac("sha256", "WebAppData")
-      .update(botToken)
-      .digest();
-
-    // Вычисляем HMAC хеш для данных
-    const calculated_hash = createHmac("sha256", secret_key)
-      .update(data_check_string)
-      .digest("hex");
-
-    // Сравниваем полученный хеш с ожидаемым
-    if (calculated_hash === hash) {
+    if (userInfo) {
       console.log("Validated!");
       // вернем тут объект юзера
-      const user_id = JSON.parse((parsed_data as any).user).id;
+      const user_id = userInfo.id;
       const user = await userModel.findOne({ user_id });
       if (!user) {
         // создаем тут юзера
@@ -49,7 +23,7 @@ export const authUser = async (req: Request, res: Response) => {
           last_daily_bonus_time_clicked: 0,
           invited_users: 0,
           stamina: 1000,
-          last_online: 0
+          last_online: 0,
         });
 
         await newUser.save();
@@ -61,7 +35,45 @@ export const authUser = async (req: Request, res: Response) => {
       res.status(403).json({ success: false });
     }
   } catch (error) {
-    console.log("Invalid init data format or error to create user");
-    res.status(400).json({ error: "Invalid init data format or error to create user" });
+    console.log(error);
+    res
+      .status(400)
+      .json({ error: "Invalid init data format or error to create user" });
+  }
+};
+
+export const userSubscription = async (req: Request, res: Response) => {
+  const { user_id, channelId } = req.body;
+  try {
+    if (!user_id || !channelId) {
+      return res.status(404).json({
+        success: false,
+        message: "No user/channel id",
+      });
+    }
+
+    const userInChannel = await bot.telegram.getChatMember(
+      channelId,
+      user_id
+    );
+    console.log(userInChannel);
+
+    return res.status(200).json({
+      subscribed: true,
+    });
+  } catch (e) {
+    const errMsg = e.description;
+
+
+
+    switch (errMsg) {
+      case "Bad Request: PARTICIPANT_ID_INVALID":
+        return res.status(200).json({
+          subscribed: false,
+        });
+      default:
+        console.log(e);
+        return res.status(400).json(e);
+    }
   }
 };

@@ -1,4 +1,4 @@
-import {bot, frontendLink} from "../index";
+import { bot, frontendLink } from "../index";
 
 bot.start((ctx) => {
   ctx.reply(
