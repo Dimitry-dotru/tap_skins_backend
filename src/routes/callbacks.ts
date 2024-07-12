@@ -56,7 +56,6 @@ export const userSubscription = async (req: Request, res: Response) => {
       channelId,
       user_id
     );
-    console.log(userInChannel);
 
     return res.status(200).json({
       subscribed: true,
