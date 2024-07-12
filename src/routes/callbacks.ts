@@ -23,7 +23,7 @@ export const authUser = async (req: Request, res: Response) => {
           last_daily_bonus_time_clicked: 0,
           invited_users: 0,
           stamina: 1000,
-          last_online: 0,
+          last_click: 0,
         });
 
         await newUser.save();
@@ -52,18 +52,22 @@ export const userSubscription = async (req: Request, res: Response) => {
       });
     }
 
-    const userInChannel = await bot.telegram.getChatMember(
-      channelId,
-      user_id
-    );
+    const userInChannel = await bot.telegram.getChatMember(channelId, user_id);
 
+    if (
+      userInChannel.status === "member" ||
+      userInChannel.status === "administrator" ||
+      userInChannel.status === "creator"
+    ) {
+      return res.status(200).json({
+        subscribed: true,
+      });
+    }
     return res.status(200).json({
-      subscribed: true,
+      subscribed: false,
     });
   } catch (e) {
     const errMsg = e.description;
-
-
 
     switch (errMsg) {
       case "Bad Request: PARTICIPANT_ID_INVALID":

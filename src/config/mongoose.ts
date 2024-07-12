@@ -19,8 +19,8 @@ const userSchema = new mongoose.Schema({
   user_id: Number,
   last_daily_bonus_time_clicked: Number,
   invited_users: Number,
-  stamina: Number,
-  last_online: Number
+  last_click: Number,
+  stamina: Number
 });
 const userModel = mongoose.model("users", userSchema);
 
