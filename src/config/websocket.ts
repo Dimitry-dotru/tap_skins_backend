@@ -1,20 +1,20 @@
 import WebSocket from "ws";
-import { userModel } from "./mongoose";
 
 const onConnect = (ws: WebSocket) => {
+  console.log("User connected");
   ws.on("message", async (message) => {
     try {
       const { user_id, last_click, stamina, balance_common } = JSON.parse(message.toString());
-      const user = await userModel.findOne({ user_id });
+      // const user = await userModel.findOne({ user_id });
       
-      user.balance_common = balance_common;
-      user.last_click = last_click;
-      user.stamina = stamina;
-      await user.save();
+      // user.balance_common = balance_common;
+      // user.last_click = last_click;
+      // user.stamina = stamina;
+      // await user.save();
 
-      ws.send(
-        JSON.stringify({ success: true, message: "Saved", newUser: user })
-      );
+      // ws.send(
+      //   JSON.stringify({ success: true, message: "Saved", newUser: user })
+      // );
     } catch (e) {
       ws.send(
         JSON.stringify({

@@ -1,7 +1,8 @@
 import { Request, Response } from "express";
-import { userModel } from "../config/mongoose";
+// import { userModel } from "../config/mongoose";
 import { checkingInitData } from "../utils/functions";
-import { bot } from "../index";
+import { bot, connection } from "../index";
+import { User } from "../config/dbTypes";
 
 export const authUser = async (req: Request, res: Response) => {
   const init_data = req.body.initData;
@@ -13,26 +14,31 @@ export const authUser = async (req: Request, res: Response) => {
       console.log("Validated!");
       // вернем тут объект юзера
       const user_id = userInfo.id;
-      const user = await userModel.findOne({ user_id });
-      if (!user) {
-        // создаем тут юзера
-        const newUser = new userModel({
-          balance_common: 0,
-          ballance_purple: 0,
-          user_id: user_id,
-          last_daily_bonus_time_clicked: 0,
-          invited_users: 0,
-          stamina: 1000,
-          last_click: 0,
-        });
+      const [response] = await connection.query<any[]>(
+        `SELECT * FROM users WHERE user_id=${user_id}`
+      );
 
-        await newUser.save();
-        return res.status(200).json(newUser);
+      if (!response || response.length) {
+        const createUserQuery = `INSERT INTO users (balance_common, balance_purple, user_id, last_daily_bonus_time_clicked, invited_users, last_click, stamina) VALUES (0, 0, ${user_id}, 0, 0, 0, 1000)`;
+
+        await connection.query(createUserQuery);
+
+        try {
+        }
+        catch(e) {
+          console.log("Error to create new user!");
+          return res.send(500).json({message: e, success: false});
+        }
+
+        const newUser = {};
+
+        return res.json(newUser);
       }
+      const user = response[0] as User;
       return res.status(200).json(user);
     } else {
       console.log("Invalid!");
-      res.status(403).json({ success: false });
+      res.status(403).json({ success: false, message: "Invalid" });
     }
   } catch (error) {
     console.log(error);

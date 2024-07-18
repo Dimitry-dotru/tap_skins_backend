@@ -1,16 +1,22 @@
 import express from "express";
 import dotenv from "dotenv";
 import { Telegraf } from "telegraf";
-import mongoose from "mongoose";
 import bodyParser from "body-parser";
 import WebSocket from "ws";
 import { createServer, Server as HTTPServer } from "http";
 import { onConnect } from "./config/websocket";
-
+import mysql from "mysql2/promise";
 dotenv.config({ path: "./.env" });
-
-const { serverPort, botToken, frontendLink, mongoUrl, webSocketPort } =
-  process.env;
+const {
+  serverPort,
+  botToken,
+  frontendLink,
+  webSocketPort,
+  dbHost,
+  dbPassword,
+  dbUsername,
+  dbDbName,
+} = process.env;
 const app = express();
 const bot = new Telegraf(botToken);
 const server: HTTPServer = createServer(app);
@@ -30,21 +36,29 @@ app.use((req, res, next) => {
 app.use(bodyParser.json());
 app.use(express.urlencoded({ extended: false }));
 
-// mongoose
-//   .connect(mongoUrl)
-//   .then(() => {
-//     console.log("Connected to db successfully");
-//   })
-//   .catch((err) => console.log("Error to connect to db!", err));
-app.listen(serverPort, async () => {
-  console.log("Server running in port " + serverPort);
-  bot.launch();
-  wss.on("connection", onConnect);
-});
+let connection: null | mysql.Connection = null;
+(async function startServer() {
+  // DB connection
+  try {
+    connection = await mysql.createConnection({
+      host: dbHost,
+      user: dbUsername,
+      password: dbPassword,
+      database: dbDbName,
+    });
+  }
+  catch (e) {
+    console.log("Error connecting to db", e);
+  }
+  console.log("Connected to db successfully!");
+  app.listen(serverPort, async () => {
+    console.log(`Server port: ${serverPort}\nWebsocket port: ${webSocketPort}`);
+    bot.launch();
+    wss.on("connection", onConnect);
+  });
+})()
 
 import "./config/bot";
-import "./config/mongoose";
 import "./config/websocket";
 import "./routes/index";
-
-export { bot, frontendLink, mongoose, app, botToken, wss };
+export { bot, frontendLink, app, botToken, wss, connection };
