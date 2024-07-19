@@ -6,7 +6,6 @@ import WebSocket from "ws";
 import { createServer, Server as HTTPServer } from "http";
 import { onConnect } from "./config/websocket";
 import mysql from "mysql2/promise";
-import cors from "cors";
 dotenv.config({ path: "./.env" });
 const {
   serverPort,
@@ -24,17 +23,25 @@ const server: HTTPServer = createServer(app);
 const wss = new WebSocket.Server({ port: Number(webSocketPort) });
 
 app.use(express.json());
-// app.use((req, res, next) => {
-//   res.header("Access-Control-Allow-Origin", "*"); // заменить на домен при продакшне
-//   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-//   res.header(
-//     "Access-Control-Allow-Headers",
-//     "Origin, X-Requested-With, Content-Type, Accept, Authorization"
-//   );
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*"); // заменить на домен при продакшне
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+  );
 
-//   next();
-// });
-app.use(cors());
+  next();
+});
+app.options("*", (req, res) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+  );
+  res.sendStatus(200);
+});
 app.use(bodyParser.json());
 app.use(express.urlencoded({ extended: false }));
 
@@ -48,8 +55,7 @@ let connection: null | mysql.Connection = null;
       password: dbPassword,
       database: dbDbName,
     });
-  }
-  catch (e) {
+  } catch (e) {
     console.log("Error connecting to db", e);
   }
   console.log("Connected to db successfully!");
@@ -58,7 +64,7 @@ let connection: null | mysql.Connection = null;
     bot.launch();
     wss.on("connection", onConnect);
   });
-})()
+})();
 
 import "./config/bot";
 import "./config/websocket";
