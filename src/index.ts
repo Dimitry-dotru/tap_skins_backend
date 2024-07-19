@@ -6,6 +6,7 @@ import WebSocket from "ws";
 import { createServer, Server as HTTPServer } from "http";
 import { onConnect } from "./config/websocket";
 import mysql from "mysql2/promise";
+import cors from "cors";
 dotenv.config({ path: "./.env" });
 const {
   serverPort,
@@ -23,16 +24,17 @@ const server: HTTPServer = createServer(app);
 const wss = new WebSocket.Server({ port: Number(webSocketPort) });
 
 app.use(express.json());
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "*"); // заменить на домен при продакшне
-  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-  res.header(
-    "Access-Control-Allow-Headers",
-    "Origin, X-Requested-With, Content-Type, Accept, Authorization"
-  );
+// app.use((req, res, next) => {
+//   res.header("Access-Control-Allow-Origin", "*"); // заменить на домен при продакшне
+//   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+//   res.header(
+//     "Access-Control-Allow-Headers",
+//     "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+//   );
 
-  next();
-});
+//   next();
+// });
+app.use(cors());
 app.use(bodyParser.json());
 app.use(express.urlencoded({ extended: false }));
 
