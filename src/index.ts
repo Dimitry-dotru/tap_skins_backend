@@ -20,7 +20,7 @@ const {
 const app = express();
 const bot = new Telegraf(botToken);
 const server: HTTPServer = createServer(app);
-const wss = new WebSocket.Server({server});
+const wss = new WebSocket.Server({server, path: "/socket"});
 
 app.use(express.json());
 app.use((req, res, next) => {
