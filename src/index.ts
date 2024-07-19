@@ -30,7 +30,7 @@ app.use((req, res, next) => {
 
   next();
 });
-const wss = new WebSocket.Server({server, path: "/socket"});
+// const wss = new WebSocket.Server({server, path: "/socket"});
 
 app.use(express.json());
 app.use(bodyParser.json());
@@ -53,11 +53,12 @@ let connection: null | mysql.Connection = null;
   app.listen(serverPort, async () => {
     console.log(`Server port: ${serverPort}\n`);
     bot.launch();
-    wss.on("connection", onConnect);
+    // wss.on("connection", onConnect);
   });
 })();
 
 import "./config/bot";
 import "./config/websocket";
 import "./routes/index";
-export { bot, frontendLink, app, botToken, wss, connection };
+// export { bot, frontendLink, app, botToken, wss, connection };
+export { bot, frontendLink, app, botToken, connection };
