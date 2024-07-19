@@ -20,7 +20,7 @@ const {
 const app = express();
 const bot = new Telegraf(botToken);
 const server: HTTPServer = createServer(app);
-const wss = new WebSocket.Server({ port: Number(webSocketPort) });
+const wss = new WebSocket.Server({server});
 
 app.use(express.json());
 app.use((req, res, next) => {
@@ -32,15 +32,6 @@ app.use((req, res, next) => {
   );
 
   next();
-});
-app.options("*", (req, res) => {
-  res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-  res.header(
-    "Access-Control-Allow-Headers",
-    "Origin, X-Requested-With, Content-Type, Accept, Authorization"
-  );
-  res.sendStatus(200);
 });
 app.use(bodyParser.json());
 app.use(express.urlencoded({ extended: false }));
@@ -60,7 +51,7 @@ let connection: null | mysql.Connection = null;
   }
   console.log("Connected to db successfully!");
   app.listen(serverPort, async () => {
-    console.log(`Server port: ${serverPort}\nWebsocket port: ${webSocketPort}`);
+    console.log(`Server port: ${serverPort}\n`);
     bot.launch();
     wss.on("connection", onConnect);
   });
