@@ -20,9 +20,6 @@ const {
 const app = express();
 const bot = new Telegraf(botToken);
 const server: HTTPServer = createServer(app);
-const wss = new WebSocket.Server({server, path: "/socket"});
-
-app.use(express.json());
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*"); // заменить на домен при продакшне
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
@@ -33,6 +30,9 @@ app.use((req, res, next) => {
 
   next();
 });
+const wss = new WebSocket.Server({server, path: "/socket"});
+
+app.use(express.json());
 app.use(bodyParser.json());
 app.use(express.urlencoded({ extended: false }));
 
