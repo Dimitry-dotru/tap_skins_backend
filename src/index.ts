@@ -30,7 +30,7 @@ app.use((req, res, next) => {
 
   next();
 });
-const wss = new WebSocket.Server({server: server, path: "/socket"});
+const wss = new WebSocket.Server({server: server});
 
 app.use(express.json());
 app.use(bodyParser.json());
