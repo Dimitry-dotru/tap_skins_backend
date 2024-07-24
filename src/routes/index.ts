@@ -4,7 +4,10 @@ import { authUser, userSubscription } from "./callbacks";
 app.post("/auth", authUser);
 app.post("/subscription", userSubscription);
 app.get("/test-req", (req, res) => {
-  return res.send("Everything is okay");
+  return res.json({ message: "Get req from /test-req" });
+});
+app.get("/", (req, res) => {
+  return res.json({message: "Get req"});
 });
 
 app.post("/log", (req, res) => {
