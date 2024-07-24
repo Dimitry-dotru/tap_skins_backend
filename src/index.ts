@@ -30,7 +30,7 @@ app.use((req, res, next) => {
 
   next();
 });
-const wss = new WebSocket.Server({server, path: "/socket"});
+const wss = new WebSocket.Server({server: server, path: "/socket"});
 
 app.use(express.json());
 app.use(bodyParser.json());
@@ -48,6 +48,7 @@ let connection: null | mysql.Connection = null;
     });
   } catch (e) {
     console.log("Error connecting to db", e);
+    return;
   }
   console.log("Connected to db successfully!");
   app.listen(serverPort, async () => {
@@ -61,4 +62,3 @@ import "./config/bot";
 import "./config/websocket";
 import "./routes/index";
 export { bot, frontendLink, app, botToken, wss, connection };
-// export { bot, frontendLink, app, botToken, connection };
