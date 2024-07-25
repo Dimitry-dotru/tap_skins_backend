@@ -30,11 +30,12 @@ app.use((req, res, next) => {
 
   next();
 });
-const wss = new WebSocket.Server({server: server});
 
 app.use(express.json());
 app.use(bodyParser.json());
 app.use(express.urlencoded({ extended: false }));
+
+const wss = new WebSocket.Server({ port: 8081 });
 
 let connection: null | mysql.Connection = null;
 (async function startServer() {
