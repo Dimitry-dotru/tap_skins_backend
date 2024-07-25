@@ -3,7 +3,6 @@ import dotenv from "dotenv";
 import { Telegraf } from "telegraf";
 import bodyParser from "body-parser";
 import WebSocket from "ws";
-import { createServer, Server as HTTPServer } from "http";
 import { onConnect } from "./config/websocket";
 import mysql from "mysql2/promise";
 dotenv.config({ path: "./.env" });
@@ -11,7 +10,7 @@ const {
   serverPort,
   botToken,
   frontendLink,
-  webSocketPort,
+  websocketPort,
   dbHost,
   dbPassword,
   dbUsername,
@@ -19,7 +18,6 @@ const {
 } = process.env;
 const app = express();
 const bot = new Telegraf(botToken);
-const server: HTTPServer = createServer(app);
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*"); // заменить на домен при продакшне
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
@@ -35,7 +33,7 @@ app.use(express.json());
 app.use(bodyParser.json());
 app.use(express.urlencoded({ extended: false }));
 
-const wss = new WebSocket.Server({ port: 8081 });
+const wss = new WebSocket.Server({ port: Number(websocketPort) });
 
 let connection: null | mysql.Connection = null;
 (async function startServer() {
