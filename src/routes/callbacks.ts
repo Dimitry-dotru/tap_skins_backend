@@ -20,13 +20,11 @@ export const authUser = async (req: Request, res: Response) => {
       if (!response || !response.length) {
         const createUserQuery = `INSERT INTO users (balance_common, balance_purple, user_id, last_daily_bonus_time_clicked, invited_users, last_click, stamina) VALUES (0, 0, ${user_id}, 0, 0, 0, 1000)`;
 
-        
         try {
           await connection.query(createUserQuery);
-        }
-        catch(e) {
+        } catch (e) {
           console.log("Error to create new user!");
-          return res.send(500).json({message: e, success: false});
+          return res.send(500).json({ message: e, success: false });
         }
 
         const [newUser] = await connection.query<any[]>(
@@ -85,5 +83,48 @@ export const userSubscription = async (req: Request, res: Response) => {
         console.log(e);
         return res.status(400).json(e);
     }
+  }
+};
+
+export const convertBalance = async (req: Request, res: Response) => {
+  const exchangeCoeff = 10000;
+  const init_data = req.body.initData;
+
+  
+  try {
+    const userInfo = checkingInitData(init_data, res) as any;
+    const user_id = userInfo.id;
+    
+    const [response] = await connection.query(
+      `SELECT * FROM users WHERE user_id=${user_id}`
+    );
+    const user = response[0] as User;
+
+    let {balance_common, balance_purple} = user;
+
+    const amntOfPurpleCoins = Math.floor(balance_common / exchangeCoeff);
+
+    balance_purple += amntOfPurpleCoins;
+    balance_common -= amntOfPurpleCoins * exchangeCoeff;
+
+    if (balance_common < 0) balance_common = 0;
+
+    await connection.query(`UPDATE users SET balance_purple=${balance_purple}, balance_common=${balance_common} WHERE user_id=${user_id}`);
+
+    return res.json({
+      success: {
+        message: "Successfully converted!",
+        success: true,
+      },
+      result: {
+        balance_common,
+        balance_purple
+      }
+    });
+  } catch (e) {
+    console.log("Can't find such user!");
+    return res
+      .sendStatus(404)
+      .json({ message: "Some error occured!", success: false });
   }
 };

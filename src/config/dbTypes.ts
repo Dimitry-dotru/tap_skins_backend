@@ -13,7 +13,7 @@
 
 export type User = {
   balance_common: number;
-  ballance_purple: number;
+  balance_purple: number;
   user_id: number;
   last_daily_bonus_time_clicked: number;
   invited_users: number;
