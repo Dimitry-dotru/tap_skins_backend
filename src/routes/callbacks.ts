@@ -163,7 +163,9 @@ export const getSkins = async (req: Request, res: Response) => {
         startrack: extractMultiSelectNames(row.startrack),
       })) as SkinStoreDataStructured[];
 
-      const [response] = await connection.query("SELECT * FROM skin_store_orders");
+      const [response] = await connection.query(
+        "SELECT * FROM skin_store_orders"
+      );
       const users = response as SkinStoreOrders[];
 
       for (const user of users) {
@@ -200,4 +202,29 @@ export const getSkins = async (req: Request, res: Response) => {
       details: e,
     });
   }
-}
+};
+
+export const checkSkins = async (req: Request, res: Response) => {
+  const skinIds = (req.body.skinIds as string).split(",");
+  try {
+    const [rows] = await connection.query("SELECT * FROM skin_store_orders");
+    const data = rows as SkinStoreOrders[];
+    const allReservedIds = data
+      .map((el) => el.items_id)
+      .join(",")
+      .split(",")
+      .filter((el) => {
+        const index = skinIds.findIndex((e) => el === e);
+        if (index === -1) return false;
+        else {
+          skinIds.splice(index, 1);
+          return true;
+        }
+      });
+
+    return res.send(allReservedIds.join(","));
+  } catch (e) {
+    console.log(e);
+    return res.status(500).send("Some error with db");
+  }
+};
