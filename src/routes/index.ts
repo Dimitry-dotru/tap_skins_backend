@@ -4,7 +4,10 @@ import { authUser, convertBalance, getSkins, userSubscription } from "./callback
 app.post("/auth", authUser);
 app.post("/subscription", userSubscription);
 app.post("/convert", convertBalance);
-// app.post("/");
+app.post("/cheat", async (req, res) => {
+  
+});
+
 
 app.get("/skins", getSkins);
 
