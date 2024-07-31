@@ -1,4 +1,8 @@
-
+// import {
+//   MultiSelectOption,
+//   RichTextItemResponse,
+//   PropertyObjectResponse,
+// } from "@notionhq/client/build/src/api-types";
 // const weaponSchemaTemplate = {
 //   item_id: String,
 //   name: String,
@@ -10,6 +14,62 @@
 //   startrack: Boolean,
 //   image_src: String,
 // }
+export type SkinStoreOrders = {
+  user_id: number,
+  items_id: string
+}
+
+// Multi_select
+export type MultiSelectOption = {
+  id: string;
+  name: string;
+};
+
+// Skin_Store_data_types
+export type SkinStoreDataStructured = {
+  item_id: number;
+  skin_name: string;
+  rarity: string;
+  weapon_type: string;
+  weapon_name: string;
+  price: number;
+  float: number;
+  startrack: string;
+  image_src: string;
+  [key: string]: any;
+}
+
+export type RowSkinStore = {
+  item_id: {
+    id: string;
+    type: string;
+    unique_id: {
+      prefix: string | null;
+      number: number;
+    };
+  };
+  skin_name: {
+    id: string;
+    title: [{ type: string; text: { content: string } }];
+  };
+  weapon_name: { id: string; rich_text: { text: { content: string } }[] };
+  image_src?: { id: string; name: string; type: string; url: string };
+  price: {
+    id: string;
+    name: string;
+    type: string;
+    number: number;
+  };
+  float: {
+    id: string;
+    name: string;
+    type: string;
+    number: number;
+  };
+  rarity: { id: string; multi_select: MultiSelectOption[] };
+  weapon_type: { id: string; multi_select: MultiSelectOption[] };
+  startrack: { id: string; multi_select: MultiSelectOption[] };
+}
 
 export type User = {
   balance_common: number;
@@ -52,8 +112,6 @@ export type User = {
 //   task_id: String
 // });
 // const taskModel = mongoose.model("tasks", userSchema);
-
-
 
 //! HISTORY
 // const historySchema = new mongoose.Schema({
