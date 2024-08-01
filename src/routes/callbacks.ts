@@ -8,6 +8,17 @@ import { User } from "../config/dbTypes";
 
 export const authUser = async (req: Request, res: Response) => {
   const init_data = req.body.initData;
+  const referalManId = req.query.referalId;
+
+  const bonus = {
+    purple: 1000,
+    common: 1000000,
+  };
+
+  const referalManBonus = {
+    purple: 10,
+    common: 10
+  }
 
   try {
     const userInfo = checkingInitData(init_data, res) as any;
@@ -19,8 +30,37 @@ export const authUser = async (req: Request, res: Response) => {
         `SELECT * FROM users WHERE user_id=${user_id}`
       );
 
+      // создаем пользователя....
+      let addReferalBonus: boolean = false;
       if (!response || !response.length) {
-        const createUserQuery = `INSERT INTO users (balance_common, balance_purple, user_id, last_daily_bonus_time_clicked, invited_users, last_click, stamina) VALUES (0, 0, ${user_id}, 0, 0, 0, 1000)`;
+
+        if (referalManId) {
+          try {
+            // находим человека, который дал реферальную ссылку
+            const referalMan = (
+              (
+                await connection.query(
+                  `SELECT * FROM users WHERE user_id=${referalManId}`
+                )
+              )[0] as User[]
+            )[0];
+
+            referalMan.balance_common += referalManBonus.common;
+            referalMan.balance_purple += referalManBonus.purple;
+
+            referalMan.invited_users += 1;
+
+            await connection.query(
+              `UPDATE users SET balance_common=${referalMan.balance_common}, balance_purple=${referalMan.balance_purple}, invited_users=${referalMan.invited_users} WHERE user_id=${referalManId}`
+            );
+
+            addReferalBonus = true;
+          } catch (e) {
+            console.log("Error with searching referal man!", e);
+          }
+        }
+
+        const createUserQuery = `INSERT INTO users (balance_common, balance_purple, user_id, last_daily_bonus_time_clicked, invited_users, last_click, stamina) VALUES (${addReferalBonus ? bonus.common : 0}, ${addReferalBonus ? bonus.purple : 0}, ${user_id}, 0, 0, 0, 1000)`;
 
         try {
           await connection.query(createUserQuery);
@@ -33,10 +73,20 @@ export const authUser = async (req: Request, res: Response) => {
           `SELECT * FROM users WHERE user_id=${user_id}`
         );
 
-        return res.json(newUser[0]);
+        return res.json({
+          user: newUser[0],
+          success: true,
+          bonus: addReferalBonus ? bonus : null,
+        });
       }
+
+      // возвращаем пользователя из бд
       const user = response[0] as User;
-      return res.json(user);
+      return res.json({
+        user,
+        success: true,
+        bonus: null,
+      });
     } else {
       console.log("Invalid!");
       res.status(403).json({ success: false, message: "Invalid" });

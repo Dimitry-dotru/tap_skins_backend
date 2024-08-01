@@ -8,9 +8,9 @@ import {
 } from "./callbacks";
 
 app.post("/auth", authUser);
+//! поменять на get
 app.post("/subscription", userSubscription);
 app.post("/convert", convertBalance);
-// app.post("/");
+app.post("/check-skins", checkSkins);
 
 app.get("/skins", getSkins);
-app.post("/check-skins", checkSkins);
