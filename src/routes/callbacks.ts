@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { Client } from "@notionhq/client";
 import { SkinStoreDataStructured, SkinStoreOrders } from "../config/dbTypes";
 
-import { checkingInitData } from "../utils/functions";
+import { checkingInitData, getRewards } from "../utils/functions";
 import { bot, connection } from "../index";
 import { User } from "../config/dbTypes";
 
@@ -17,8 +17,8 @@ export const authUser = async (req: Request, res: Response) => {
 
   const referalManBonus = {
     purple: 10,
-    common: 10
-  }
+    common: 10,
+  };
 
   try {
     const userInfo = checkingInitData(init_data, res) as any;
@@ -27,13 +27,12 @@ export const authUser = async (req: Request, res: Response) => {
       // вернем тут объект юзера
       const user_id = userInfo.id;
       const [response] = await connection.query<any[]>(
-        `SELECT * FROM users WHERE user_id=${user_id}`
+        `SELECT balance_common, balance_purple, user_id, last_daily_bonus_time_clicked, invited_users, last_click, stamina FROM users WHERE user_id=${user_id}`
       );
 
       // создаем пользователя....
       let addReferalBonus: boolean = false;
       if (!response || !response.length) {
-
         if (referalManId) {
           try {
             // находим человека, который дал реферальную ссылку
@@ -60,7 +59,9 @@ export const authUser = async (req: Request, res: Response) => {
           }
         }
 
-        const createUserQuery = `INSERT INTO users (balance_common, balance_purple, user_id, last_daily_bonus_time_clicked, invited_users, last_click, stamina) VALUES (${addReferalBonus ? bonus.common : 0}, ${addReferalBonus ? bonus.purple : 0}, ${user_id}, 0, 0, 0, 1000)`;
+        const createUserQuery = `INSERT INTO users (balance_common, balance_purple, user_id, last_daily_bonus_time_clicked, invited_users, last_click, stamina) VALUES (${
+          addReferalBonus ? bonus.common : 0
+        }, ${addReferalBonus ? bonus.purple : 0}, ${user_id}, 0, 0, 0, 1000)`;
 
         try {
           await connection.query(createUserQuery);
@@ -214,23 +215,18 @@ export const getSkins = async (req: Request, res: Response) => {
       })) as SkinStoreDataStructured[];
 
       const [response] = await connection.query(
-        "SELECT * FROM skin_store_orders"
+        "SELECT user_id, skin_store_orders_ids FROM users"
       );
       const users = response as SkinStoreOrders[];
 
       for (const user of users) {
-        const itemsId = user.items_id.split(",");
+        const itemsId = user.skin_store_orders_ids.split(",");
 
         itemsId.forEach((id) => {
           const itemId = storeDataStructured.findIndex(
             (el) => el.item_id === Number(id)
           );
-          if (itemId === -1) {
-            console.log(
-              "Trying to delete element " + itemId + " but it wasn't found!"
-            );
-          }
-          storeDataStructured.splice(itemId, 1);
+          if (itemId !== -1) storeDataStructured.splice(itemId, 1);
         });
       }
 
@@ -257,10 +253,12 @@ export const getSkins = async (req: Request, res: Response) => {
 export const checkSkins = async (req: Request, res: Response) => {
   const skinIds = (req.body.skinIds as string).split(",");
   try {
-    const [rows] = await connection.query("SELECT * FROM skin_store_orders");
+    const [rows] = await connection.query(
+      "SELECT user_id, skin_store_orders_ids FROM users"
+    );
     const data = rows as SkinStoreOrders[];
     const allReservedIds = data
-      .map((el) => el.items_id)
+      .map((el) => el.skin_store_orders_ids)
       .join(",")
       .split(",")
       .filter((el) => {
@@ -278,3 +276,149 @@ export const checkSkins = async (req: Request, res: Response) => {
     return res.status(500).send("Some error with db");
   }
 };
+
+export const reward = async (req: Request, res: Response) => {
+  const reward_id = parseInt(req.params.reward_id);
+  const init_data = req.body.initData;
+
+  const rewardObj = {
+    common: 0,
+    purple: 0
+  }
+
+  try {
+    const userInfo = checkingInitData(init_data, res) as any;
+    const user_id = userInfo.id;
+
+    const rewards = await getRewards();
+
+    if (!rewards) {
+      console.log("Some error with notion");
+      return res.status(500).json({
+        message: "Unknown error, please try again later",
+        success: false,
+      });
+    }
+
+    const user = (
+      (
+        await connection.query(
+          `SELECT invited_users, balance_common, balance_purple FROM users WHERE user_id=${user_id}`
+        )
+      )[0] as any
+    )[0];
+
+    const clickedReferal = rewards.find((el) => el.reward_id === reward_id);
+
+    if (!clickedReferal) {
+      return res.status(404).json({
+        success: false,
+        message: "Error to find such referal!",
+      });
+    }
+
+    if (user.invited_users - clickedReferal.referal_amount < 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Not enough invited people to claim reward!",
+      });
+    }
+
+    if (clickedReferal.reward_type === "purple_coin")
+      rewardObj.purple += clickedReferal.reward;
+    else if (clickedReferal.reward_type === "yellow_coin")
+      rewardObj.common += clickedReferal.reward;
+
+    await connection.query(
+      `UPDATE users SET invited_users=${
+        user.invited_users - clickedReferal.referal_amount
+      }, balance_common=${user.balance_common + rewardObj.common}, balance_purple=${user.balance_purple + rewardObj.purple} WHERE user_id=${user_id}`
+    );
+
+    return res.json({
+      success: true,
+      message: "Reward was claimed!",
+    });
+  } catch (e) {
+    console.log(e);
+    return res.status(400).json({
+      success: false,
+      message: "Unknown error, please try again later",
+      details: e,
+    });
+  }
+};
+
+// async function getRewards() {
+//   const user_id = 16123123;
+
+//   // Извлечение имен из мультиселектов
+//   function extractMultiSelectNames(options: {
+//     multi_select: MultiSelectOption[];
+//   }): string {
+//     return options.multi_select.map((option) => option.name).join(", ");
+//   }
+
+//   // Извлечение только URL из объекта files
+//   function extractFileUrls(
+//     files: { name: string; file: { url: string } }[]
+//   ): string {
+//     return files.map((file) => file.file.url).join(", ");
+//   }
+
+//   const notionSecret = process.env.NOTION_SECRET;
+//   const notionStoreDataBaseld =
+//     process.env.NOTION_REFERAL_REWARD_STORE_DATABASE_ID;
+//   const notion = new Client({ auth: notionSecret });
+
+//   // Проверка наличия необходимых переменных окружения
+//   if (!notionSecret || !notionStoreDataBaseld) {
+//     // res.status(500).json({ error: "Missing notion secret or DB-ID." });
+//     return;
+//   }
+
+//   try {
+//     const query = await notion.databases.query({
+//       database_id: notionStoreDataBaseld,
+//     });
+
+//     const rows = query.results.map(
+//       (res) => (res as any).properties
+//     ) as RowReferal[];
+
+//     const referalRewardStoreStructured: ReferalRewardStoreDataStructured[] =
+//       rows.map((row) => ({
+//         reward_id: row.reward_id.unique_id.number || 0,
+//         reward_name:
+//           row.reward_name.title?.[0]?.text?.content ?? "Default Name",
+//         reward_type: extractMultiSelectNames(row.reward_type),
+//         referal_amount: row.referal_amount.number || 0,
+//         reward: row.reward.number || 0,
+//         referal_icon: extractFileUrls(row.referal_icon.files),
+//       }));
+
+//     const claimedUsersRewards: { user_id: number; claimed_referals: string }[] =
+//       (
+//         await connection.query(
+//           `SELECT * FROM claimed_referals WHERE user_id=${user_id}`
+//         )
+//       )[0] as any;
+
+//     if (claimedUsersRewards.length) {
+//       const claimedIds = claimedUsersRewards[0].claimed_referals.split(",");
+//       referalRewardStoreStructured.map((el) => {
+//         const completed =
+//           claimedIds.findIndex((id) => parseInt(id) === el.reward_id) !== -1;
+//           console.log({ ...el, completed: completed });
+//         return { ...el, completed: completed };
+//       });
+//     }
+
+//     // console.log(referalRewardStoreStructured);
+
+//     // res.json({ referalRewardStoreStructured });
+//   } catch (error) {
+//     console.log(error);
+//     // res.status(500).json({ error: "Failed to fetch data from Notion" });
+//   }
+// }

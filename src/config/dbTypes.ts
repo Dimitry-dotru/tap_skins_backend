@@ -15,9 +15,9 @@
 //   image_src: String,
 // }
 export type SkinStoreOrders = {
-  user_id: number,
-  items_id: string
-}
+  user_id: number;
+  skin_store_orders_ids: string;
+};
 
 // Multi_select
 export type MultiSelectOption = {
@@ -37,6 +37,52 @@ export type SkinStoreDataStructured = {
   startrack: string;
   image_src: string;
   [key: string]: any;
+}
+
+export type ReferalRewardStoreDataStructured = {
+  reward_id: number;
+  reward_name: string;
+  reward: number;
+  referal_amount: number;
+  reward_type: string;
+  referal_icon: string;
+  [key: string]: any;
+}
+
+
+export type RowReferal = {
+  type(type: any): string;
+  reward_id: {
+    id: string;
+    type: string;
+    unique_id: {
+      prefix: string | null;
+      number: number;
+    };
+  };
+  reward_name: {
+    id: string;
+    title: [{ type: string; text: { content: string } }];
+  };
+  reward_type: { id: string; multi_select: MultiSelectOption[] };
+  reward: {
+    id: string;
+    name: string;
+    type: string;
+    number: number;
+  };
+  referal_amount: {
+    id: string;
+    name: string;
+    type: string;
+    number: number;
+  };
+  referal_icon: {
+    id: string;
+    name: string;
+    type: string;
+    files: { name: string; file: { url: string } }[];
+  };
 }
 
 export type RowSkinStore = {

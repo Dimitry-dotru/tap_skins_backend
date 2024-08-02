@@ -2,6 +2,8 @@ import { parse } from "querystring";
 import { botToken } from "../index";
 import { createHmac } from "crypto";
 import { Response } from "express";
+import { MultiSelectOption, ReferalRewardStoreDataStructured, RowReferal } from "../config/dbTypes";
+import { Client } from "@notionhq/client";
 
 // проверяет авторизацию юзера, если все ок, то вернет его, если нет, то null
 const checkingInitData = (init_data, res: Response) => {
@@ -35,4 +37,50 @@ const checkingInitData = (init_data, res: Response) => {
     : null;
 };
 
-export { checkingInitData };
+const getRewards =
+  async (): Promise<null | ReferalRewardStoreDataStructured[]> => {
+    function extractMultiSelectNames(options: {
+      multi_select: MultiSelectOption[];
+    }): string {
+      return options.multi_select.map((option) => option.name).join(", ");
+    }
+    function extractFileUrls(
+      files: { name: string; file: { url: string } }[]
+    ): string {
+      return files.map((file) => file.file.url).join(", ");
+    }
+    const notionSecret = process.env.NOTION_SECRET;
+    const notionStoreDataBaseld =
+      process.env.NOTION_REFERAL_REWARD_STORE_DATABASE_ID;
+    const notion = new Client({ auth: notionSecret });
+    // Проверка наличия необходимых переменных окружения
+    if (!notionSecret || !notionStoreDataBaseld) {
+      console.log("No secret for dbs");
+      return;
+    }
+    try {
+      const query = await notion.databases.query({
+        database_id: notionStoreDataBaseld,
+      });
+      const rows = query.results.map(
+        (res) => (res as any).properties
+      ) as RowReferal[];
+      const referalRewardStoreStructured: ReferalRewardStoreDataStructured[] =
+        rows.map((row) => ({
+          reward_id: row.reward_id.unique_id.number || 0,
+          reward_name:
+            row.reward_name.title?.[0]?.text?.content ?? "Default Name",
+          reward_type: extractMultiSelectNames(row.reward_type),
+          referal_amount: row.referal_amount.number || 0,
+          reward: row.reward.number || 0,
+          referal_icon: extractFileUrls(row.referal_icon.files),
+        }));
+
+      return referalRewardStoreStructured;
+    } catch (error) {
+      console.log(error);
+      return null;
+    }
+  };
+
+export { checkingInitData, getRewards };
