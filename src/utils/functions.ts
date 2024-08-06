@@ -2,7 +2,7 @@ import { parse } from "querystring";
 import { botToken } from "../index";
 import { createHmac } from "crypto";
 import { Response } from "express";
-import { MultiSelectOption, ReferalRewardStoreDataStructured, RowReferal } from "../config/dbTypes";
+import { MultiSelectOption, ReferalRewardStoreDataStructured, RowReferal, SkinStoreOrders } from "../config/dbTypes";
 import { Client } from "@notionhq/client";
 
 // проверяет авторизацию юзера, если все ок, то вернет его, если нет, то null

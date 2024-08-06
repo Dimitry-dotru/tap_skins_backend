@@ -189,71 +189,181 @@ export const getSkins = async (req: Request, res: Response) => {
   const notion = new Client({ auth: notionSecret });
 
   try {
-    try {
-      const query = await notion.databases.query({
-        database_id: notionStoreDataBaseld,
-      });
+    const query = await notion.databases.query({
+      database_id: notionStoreDataBaseld,
+    });
 
-      const rows = query.results.map((res) => (res as any).properties);
-      const storeDataStructured = rows.map((row) => ({
-        item_id: row.item_id.unique_id.number || 0,
-        skin_name: row.skin_name.title?.[0]?.text?.content ?? "Default Name",
-        weapon_name:
-          row.weapon_name.rich_text
-            .map((richText) => richText.text.content)
-            .filter((content) => content.trim() !== "")
-            .join(" ") || "Default Description",
-        image_src: row.image_src?.url ?? "URL not available",
-        price: row.price.number || 0,
-        float: parseFloat(row.float.number.toFixed(5)) || 0,
-        rarity: extractMultiSelectNames(row.rarity),
-        weapon_type: extractMultiSelectNames(row.weapon_type),
-        startrack: extractMultiSelectNames(row.startrack),
-      })) as SkinStoreDataStructured[];
+    const rows = query.results.map((res) => (res as any).properties);
+    const storeDataStructured = rows.map((row) => ({
+      item_id: row.item_id.unique_id.number || 0,
+      skin_name: row.skin_name.title?.[0]?.text?.content ?? "Default Name",
+      weapon_name:
+        row.weapon_name.rich_text
+          .map((richText) => richText.text.content)
+          .filter((content) => content.trim() !== "")
+          .join(" ") || "Default Description",
+      image_src: row.image_src?.url ?? "URL not available",
+      price: row.price.number || 0,
+      float: parseFloat(row.float.number.toFixed(5)) || 0,
+      rarity: extractMultiSelectNames(row.rarity),
+      weapon_type: extractMultiSelectNames(row.weapon_type),
+      startrack: extractMultiSelectNames(row.startrack),
+    })) as SkinStoreDataStructured[];
 
-      const [response] = await connection.query(
-        "SELECT user_id, skin_store_orders_ids FROM users"
-      );
-      const users = response as SkinStoreOrders[];
+    const [response] = await connection.query(
+      "SELECT user_id, skin_store_orders_ids FROM users"
+    );
+    const users = response as SkinStoreOrders[];
 
-      for (const user of users) {
-        const itemsId = user.skin_store_orders_ids.split(",");
+    for (const user of users) {
+      const itemsId = user.skin_store_orders_ids.split(",");
 
-        itemsId.forEach((id) => {
-          const itemId = storeDataStructured.findIndex(
-            (el) => el.item_id === Number(id)
-          );
-          if (itemId !== -1) storeDataStructured.splice(itemId, 1);
-        });
-      }
-
-      return res.json(storeDataStructured);
-    } catch (error) {
-      console.log("Error to get skin list!", error);
-
-      return res.status(400).json({
-        success: false,
-        message: "Error to get skin list!",
-        details: error,
+      itemsId.forEach((id) => {
+        const itemId = storeDataStructured.findIndex(
+          (el) => el.item_id === Number(id)
+        );
+        if (itemId !== -1) storeDataStructured.splice(itemId, 1);
       });
     }
-  } catch (e) {
-    console.log("Error with user data!", e);
+
+    return res.json(storeDataStructured);
+  } catch (error) {
+    console.log("Error to get skin list!", error);
+
     return res.status(400).json({
       success: false,
-      message: "Error with user data!",
-      details: e,
+      message: "Error to get skin list!",
+      details: error,
     });
   }
 };
+export const addToCartHandle = async (req: Request, res: Response) => {
+  try {
+    const item_id = req.params.item_id;
+    const init_data = req.body.initData;
+
+    const user_id = (checkingInitData(init_data, res) as any).id;
+
+    try {
+      const usersOrders = (
+        await connection.query(`SELECT skin_store_orders_ids, user_id FROM users`)
+      )[0] as { skin_store_orders_ids: string; user_id: number }[];
+
+      for (const order of usersOrders) {
+        const idsArr = order.skin_store_orders_ids.split(",");
+        
+        if (idsArr.find(el => parseInt(el) === parseInt(item_id))) {
+          return res.json({
+            success: false,
+            message: "This item is taken by some user!"
+          })
+        }
+      }
+
+      const usersCart = usersOrders.find(el => el.user_id === user_id);
+
+      if (!usersCart) {
+        console.log("Can't find user with id " + user_id);
+        return res.json({
+          message: "Some error occured, try again later",
+          success: false
+        })
+      }
+
+      const list = usersCart.skin_store_orders_ids.split(",");
+      if (list[0].trim() === "") list[0] = item_id;
+      else list.push(item_id);
+
+      usersCart.skin_store_orders_ids = list.join(",");
+      await connection.query(
+        `UPDATE users SET skin_store_orders_ids="${
+          usersCart.skin_store_orders_ids
+        }", order_date=${Date.now()} WHERE user_id=${user_id}`
+      );
+
+      return res.json({
+        message: "Successfully addded to cart!",
+        success: true
+      })
+    } catch (e) {
+      console.log(e);
+      return res.status(500).json({
+        message: "Some error occured, try again!",
+        success: false,
+        details: e,
+      });
+    }
+  } catch (error) {
+    console.log(error);
+    return res.status(403).json({
+      message: "Unable to auth!",
+      success: false,
+      details: error,
+    });
+  }
+};
+export const removeFromCartHandle = async (req: Request, res: Response) => {
+  try {
+    const item_id = req.params.item_id;
+    const init_data = req.body.initData;
+
+    const user_id = (checkingInitData(init_data, res) as any).id;
+
+    try {
+      const usersCart = (
+        await connection.query(
+          `SELECT skin_store_orders_ids, user_id FROM users WHERE user_id=${user_id}`
+        )
+      )[0][0] as { skin_store_orders_ids: string; user_id: number };
+
+      if (!usersCart) {
+        console.log("Can't find user with id " + user_id);
+        return res.status(404).send({
+          message: "Can't find user, try again later",
+          success: false,
+        });
+      }
+
+      const list = usersCart.skin_store_orders_ids.split(",").filter(el => parseInt(el) !== parseInt(item_id));
+
+      usersCart.skin_store_orders_ids = list.join(",");
+      await connection.query(
+        `UPDATE users SET skin_store_orders_ids="${
+          usersCart.skin_store_orders_ids
+        }" WHERE user_id=${user_id}`
+      );
+
+      return res.json({
+        message: "Deleted successfully!",
+        success: true,
+      });
+    } catch (e) {
+      console.log(e);
+      return res.status(500).json({
+        message: "Some error occured, try again!",
+        success: false,
+        details: e,
+      });
+    }
+  } catch (error) {
+    console.log(error);
+    return res.status(403).json({
+      message: "Unable to auth!",
+      success: false,
+      details: error,
+    });
+  }
+}
 
 export const checkSkins = async (req: Request, res: Response) => {
   const skinIds = (req.body.skinIds as string).split(",");
+  const initData = req.body.initData;
   try {
+    const user_id = (checkingInitData(initData, res) as any).id;
     const [rows] = await connection.query(
       "SELECT user_id, skin_store_orders_ids FROM users"
     );
-    const data = rows as SkinStoreOrders[];
+    const data = (rows as SkinStoreOrders[]).filter(el => el.user_id !== user_id);
     const allReservedIds = data
       .map((el) => el.skin_store_orders_ids)
       .join(",")
