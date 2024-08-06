@@ -3,6 +3,7 @@ import {
   authUser,
   checkSkins,
   convertBalance,
+  dailyReward,
   getSkins,
   reward,
   userSubscription,
@@ -14,5 +15,6 @@ app.post("/subscription", userSubscription);
 app.post("/convert", convertBalance);
 app.post("/check-skins", checkSkins);
 app.post("/reward/:reward_id", reward);
+app.post("/daily-reward", dailyReward);
 
 app.get("/skins", getSkins);

@@ -8,7 +8,8 @@ import { User } from "../config/dbTypes";
 
 export const authUser = async (req: Request, res: Response) => {
   const init_data = req.body.initData;
-  const referalManId = req.query.referalId;
+  const referalManId =
+    req.query.referalId === undefined ? null : req.query.referalId;
 
   const bonus = {
     purple: 1000,
@@ -36,13 +37,9 @@ export const authUser = async (req: Request, res: Response) => {
         if (referalManId) {
           try {
             // находим человека, который дал реферальную ссылку
-            const referalMan = (
-              (
-                await connection.query(
-                  `SELECT * FROM users WHERE user_id=${referalManId}`
-                )
-              )[0] as User[]
-            )[0];
+            const referalMan = (await connection.query(
+              `SELECT * FROM users WHERE user_id=${referalManId}`
+            )[0][0]) as User;
 
             referalMan.balance_common += referalManBonus.common;
             referalMan.balance_purple += referalManBonus.purple;
@@ -283,8 +280,8 @@ export const reward = async (req: Request, res: Response) => {
 
   const rewardObj = {
     common: 0,
-    purple: 0
-  }
+    purple: 0,
+  };
 
   try {
     const userInfo = checkingInitData(init_data, res) as any;
@@ -332,7 +329,11 @@ export const reward = async (req: Request, res: Response) => {
     await connection.query(
       `UPDATE users SET invited_users=${
         user.invited_users - clickedReferal.referal_amount
-      }, balance_common=${user.balance_common + rewardObj.common}, balance_purple=${user.balance_purple + rewardObj.purple} WHERE user_id=${user_id}`
+      }, balance_common=${
+        user.balance_common + rewardObj.common
+      }, balance_purple=${
+        user.balance_purple + rewardObj.purple
+      } WHERE user_id=${user_id}`
     );
 
     return res.json({
@@ -345,6 +346,66 @@ export const reward = async (req: Request, res: Response) => {
       success: false,
       message: "Unknown error, please try again later",
       details: e,
+    });
+  }
+};
+
+export const dailyReward = async (req: Request, res: Response) => {
+  const initData = req.body.initData;
+  const dailyBonusReward = {
+    purple: 0,
+    common: 5000,
+  };
+
+  try {
+    const userInfo = checkingInitData(initData, res) as any;
+    const user_id = userInfo.id;
+
+    try {
+      interface SelectedUserFields {
+        last_daily_bonus_time_clicked: number;
+        balance_common: number;
+        balance_purple: number;
+      }
+
+      const userData = (
+        await connection.query(
+          `SELECT last_daily_bonus_time_clicked, balance_common, balance_purple FROM users WHERE user_id=${user_id}`
+        )
+      )[0][0] as SelectedUserFields;
+
+      const currentTime = Date.now();
+      if (
+        Math.abs(currentTime - userData.last_daily_bonus_time_clicked) >=
+        24 * 60 * 60 * 1000
+      ) {
+        userData.balance_common += dailyBonusReward.common;
+        userData.balance_purple += dailyBonusReward.purple;
+
+        await connection.query(
+          `UPDATE users SET balance_common=${
+            userData.balance_common
+          }, balance_purple=${
+            userData.balance_purple
+          }, last_daily_bonus_time_clicked=${Date.now()} WHERE user_id=${user_id}`
+        );
+
+        return res.json({
+          message: "",
+          success: true,
+        });
+      }
+
+      return res.json({
+        message: "You can't claim reward!",
+        success: false,
+      });
+    } catch (e) {}
+  } catch (e) {
+    res.status(500).json({
+      message: "Error!",
+      details: e,
+      success: false,
     });
   }
 };
