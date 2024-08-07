@@ -1,10 +1,23 @@
 import { Request, Response } from "express";
 import { Client } from "@notionhq/client";
-import { SkinStoreDataStructured, SkinStoreOrders } from "../config/dbTypes";
+import {
+  RowTaskStore,
+  SkinStoreDataStructured,
+  SkinStoreOrders,
+  TaskStoreDataStructured,
+  TelegramUser,
+} from "../config/dbTypes";
 
-import { checkingInitData, getRewards } from "../utils/functions";
+import {
+  checkingInitData,
+  extractFileUrls,
+  extractMultiSelectNames,
+  getRewards,
+} from "../utils/functions";
 import { bot, connection } from "../index";
 import { User } from "../config/dbTypes";
+
+const notionSecret = process.env.NOTION_SECRET;
 
 export const authUser = async (req: Request, res: Response) => {
   const init_data = req.body.initData;
@@ -181,12 +194,8 @@ export const convertBalance = async (req: Request, res: Response) => {
 };
 
 export const getSkins = async (req: Request, res: Response) => {
-  function extractMultiSelectNames(options) {
-    return options.multi_select.map((option) => option.name).join(", ");
-  }
-  const notionSecret = process.env.NOTION_SECRET;
-  const notionStoreDataBaseld = process.env.NOTION_SKIN_STORE_DATABASE_ID;
   const notion = new Client({ auth: notionSecret });
+  const notionStoreDataBaseld = process.env.NOTION_SKIN_STORE_DATABASE_ID;
 
   try {
     const query = await notion.databases.query({
@@ -211,12 +220,15 @@ export const getSkins = async (req: Request, res: Response) => {
     })) as SkinStoreDataStructured[];
 
     const [response] = await connection.query(
-      "SELECT user_id, skin_store_orders_ids FROM users"
+      "SELECT user_id, skin_store_orders_ids, skin_store_items_cart_ids FROM users"
     );
     const users = response as SkinStoreOrders[];
 
     for (const user of users) {
       const itemsId = user.skin_store_orders_ids.split(",");
+
+      // const cartIds =
+      // itemsId.push(user.skin_store_items_cart_ids.split(","));
 
       itemsId.forEach((id) => {
         const itemId = storeDataStructured.findIndex(
@@ -246,45 +258,47 @@ export const addToCartHandle = async (req: Request, res: Response) => {
 
     try {
       const usersOrders = (
-        await connection.query(`SELECT skin_store_orders_ids, user_id FROM users`)
-      )[0] as { skin_store_orders_ids: string; user_id: number }[];
+        await connection.query(
+          `SELECT skin_store_items_cart_ids, user_id FROM users`
+        )
+      )[0] as { skin_store_items_cart_ids: string; user_id: number }[];
 
       for (const order of usersOrders) {
-        const idsArr = order.skin_store_orders_ids.split(",");
-        
-        if (idsArr.find(el => parseInt(el) === parseInt(item_id))) {
+        const idsArr = order.skin_store_items_cart_ids.split(",");
+
+        if (idsArr.find((el) => parseInt(el) === parseInt(item_id))) {
           return res.json({
             success: false,
-            message: "This item is taken by some user!"
-          })
+            message: "This item is taken by some user!",
+          });
         }
       }
 
-      const usersCart = usersOrders.find(el => el.user_id === user_id);
+      const usersCart = usersOrders.find((el) => el.user_id === user_id);
 
       if (!usersCart) {
         console.log("Can't find user with id " + user_id);
         return res.json({
           message: "Some error occured, try again later",
-          success: false
-        })
+          success: false,
+        });
       }
 
-      const list = usersCart.skin_store_orders_ids.split(",");
+      const list = usersCart.skin_store_items_cart_ids.split(",");
       if (list[0].trim() === "") list[0] = item_id;
       else list.push(item_id);
 
-      usersCart.skin_store_orders_ids = list.join(",");
+      usersCart.skin_store_items_cart_ids = list.join(",");
       await connection.query(
         `UPDATE users SET skin_store_orders_ids="${
-          usersCart.skin_store_orders_ids
+          usersCart.skin_store_items_cart_ids
         }", order_date=${Date.now()} WHERE user_id=${user_id}`
       );
 
       return res.json({
         message: "Successfully addded to cart!",
-        success: true
-      })
+        success: true,
+      });
     } catch (e) {
       console.log(e);
       return res.status(500).json({
@@ -324,13 +338,13 @@ export const removeFromCartHandle = async (req: Request, res: Response) => {
         });
       }
 
-      const list = usersCart.skin_store_orders_ids.split(",").filter(el => parseInt(el) !== parseInt(item_id));
+      const list = usersCart.skin_store_orders_ids
+        .split(",")
+        .filter((el) => parseInt(el) !== parseInt(item_id));
 
       usersCart.skin_store_orders_ids = list.join(",");
       await connection.query(
-        `UPDATE users SET skin_store_orders_ids="${
-          usersCart.skin_store_orders_ids
-        }" WHERE user_id=${user_id}`
+        `UPDATE users SET skin_store_orders_ids="${usersCart.skin_store_orders_ids}" WHERE user_id=${user_id}`
       );
 
       return res.json({
@@ -353,7 +367,7 @@ export const removeFromCartHandle = async (req: Request, res: Response) => {
       details: error,
     });
   }
-}
+};
 
 export const checkSkins = async (req: Request, res: Response) => {
   const skinIds = (req.body.skinIds as string).split(",");
@@ -363,7 +377,9 @@ export const checkSkins = async (req: Request, res: Response) => {
     const [rows] = await connection.query(
       "SELECT user_id, skin_store_orders_ids FROM users"
     );
-    const data = (rows as SkinStoreOrders[]).filter(el => el.user_id !== user_id);
+    const data = (rows as SkinStoreOrders[]).filter(
+      (el) => el.user_id !== user_id
+    );
     const allReservedIds = data
       .map((el) => el.skin_store_orders_ids)
       .join(",")
@@ -517,6 +533,78 @@ export const dailyReward = async (req: Request, res: Response) => {
       details: e,
       success: false,
     });
+  }
+};
+
+export const getTasks = async (req: Request, res: Response) => {
+  // console.log(req.query);
+  const notionStoreDataBaseld = process.env.NOTION_TASK_STORE_DATABASE_ID;
+  const notion = new Client({ auth: notionSecret });
+
+  // Проверка наличия необходимых переменных окружения
+  if (!notionSecret || !notionStoreDataBaseld) {
+    return res
+      .status(500)
+      .json({
+        success: false,
+        message: "Error getting tasks",
+        details: "No db secrets",
+      });
+  }
+
+  const user = checkingInitData(req.query, res) as TelegramUser;
+  const user_id = user.id;
+
+  try {
+    const query = await notion.databases.query({
+      database_id: notionStoreDataBaseld,
+    });
+
+    const rows = query.results.map(
+      (res) => (res as any).properties
+    ) as RowTaskStore[];
+    const taskStoreDataStructured: TaskStoreDataStructured[] = rows.map(
+      (row) => ({
+        task_id: row.task_id.unique_id.number || 0,
+        task_name: row.task_name.title?.[0]?.text?.content ?? "Default Name",
+        platform_type: extractMultiSelectNames(row.platform_type),
+        reward_type: extractMultiSelectNames(row.reward_type),
+        reward: row.reward.number || 0,
+        link_to_join: row.link_to_join?.url ?? "URL not available",
+        social_icon: extractFileUrls(row.social_icon.files),
+      })
+    );
+
+    const completedTasks = (
+      await connection.query(
+        `SELECT completed_tasks_ids FROM users WHERE user_id=${user_id}`
+      )
+    )[0][0].completed_tasks_ids.split(",") as string[];
+
+    if (completedTasks[0].trim() === "") completedTasks.shift();
+
+    const unCompletedTasks: TaskStoreDataStructured[] =
+      taskStoreDataStructured.filter((el) => {
+        return !completedTasks.find(
+          (task_id) => el.task_id === parseInt(task_id)
+        );
+      });
+
+    return res.status(200).json({
+      unCompletedTasks,
+      tasks: {
+        completed: completedTasks.length,
+        total: taskStoreDataStructured.length,
+      },
+    });
+  } catch (error) {
+    return res
+      .status(500)
+      .json({
+        succcess: false,
+        message: "Some error occured!",
+        details: error,
+      });
   }
 };
 

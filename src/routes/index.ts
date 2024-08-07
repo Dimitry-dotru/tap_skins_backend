@@ -1,4 +1,5 @@
 import { app } from "../index";
+import { checkingInitData } from "../utils/functions";
 import {
   addToCartHandle,
   authUser,
@@ -6,6 +7,7 @@ import {
   convertBalance,
   dailyReward,
   getSkins,
+  getTasks,
   removeFromCartHandle,
   reward,
   userSubscription,
@@ -23,3 +25,5 @@ app.post("/cart/remove/:item_id", removeFromCartHandle);
 
 app.post("/reward/:reward_id", reward);
 app.post("/daily-reward", dailyReward);
+
+app.get("/tasks", getTasks);

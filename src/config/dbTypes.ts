@@ -14,9 +14,52 @@
 //   startrack: Boolean,
 //   image_src: String,
 // }
+
+export interface TaskStoreDataStructured {
+  task_id: number;
+  task_name: string;
+  platform_type: string;
+  reward_type: string;
+  link_to_join: string;
+  social_icon: string;
+  [key: string]: any;
+}
+
+export interface RowTaskStore {
+  type(type: any): string;
+  task_id: {
+    id: string;
+    type: string;
+    unique_id: {
+      prefix: string | null;
+      number: number;
+    };
+  };
+  task_name: {
+    id: string;
+    title: [{ type: string; text: { content: string } }];
+  };
+  platform_type: { id: string; multi_select: MultiSelectOption[] };
+  reward_type: { id: string; multi_select: MultiSelectOption[] };
+  link_to_join?: { id: string; name: string; type: string; url: string };
+  reward: {
+    id: string;
+    name: string;
+    type: string;
+    number: number;
+  };
+  social_icon: {
+    id: string;
+    name: string;
+    type: string;
+    files: { name: string; file: { url: string } }[];
+  };
+}
+
 export type SkinStoreOrders = {
   user_id: number;
   skin_store_orders_ids: string;
+  skin_store_items_cart_ids: string;
 };
 
 // Multi_select
@@ -125,6 +168,16 @@ export type User = {
   invited_users: number;
   last_click: number;
   stamina: number;
+};
+
+export type TelegramUser = {
+  id: number;
+  first_name: string;
+  last_name: string;
+  username: string;
+  language_code: string;
+  is_premium: boolean;
+  allows_write_to_pm: boolean;
 };
 
 //! USER
