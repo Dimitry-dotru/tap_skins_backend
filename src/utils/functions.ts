@@ -7,25 +7,26 @@ import {
   ReferalRewardStoreDataStructured,
   RowReferal,
   RowTaskStore,
+  SkinStoreDataStructured,
   TaskStoreDataStructured,
 } from "../config/dbTypes";
 import { Client } from "@notionhq/client";
 
 const notionSecret = process.env.NOTION_SECRET;
 
-function extractMultiSelectNames(options: {
+export function extractMultiSelectNames(options: {
   multi_select: MultiSelectOption[];
 }): string {
   return options.multi_select.map((option) => option.name).join(", ");
 }
-function extractFileUrls(
+export function extractFileUrls(
   files: { name: string; file: { url: string } }[]
 ): string {
   return files.map((file) => file.file.url).join(", ");
 }
 
 // проверяет авторизацию юзера, если все ок, то вернет его, если нет, то null
-const checkingInitData = (init_data, res: Response) => {
+export const checkingInitData = (init_data, res: Response) => {
   const parsed_data =
     typeof init_data === "string" ? parse(init_data) : init_data;
 
@@ -57,7 +58,7 @@ const checkingInitData = (init_data, res: Response) => {
     : null;
 };
 
-const getRewards = async (): Promise<
+export const getRewards = async (): Promise<
   null | ReferalRewardStoreDataStructured[]
 > => {
   const notionStoreDataBaseld =
@@ -91,5 +92,78 @@ const getRewards = async (): Promise<
     return null;
   }
 };
+export const clearUsersCart = async (user_id: number) => {
+  return await connection.query(
+    `UPDATE users SET skin_store_items_cart_ids='', order_date=0 WHERE user_id=${user_id}`
+  );
+};
 
-export { checkingInitData, getRewards, extractFileUrls, extractMultiSelectNames };
+export const getSkinsList = async (): Promise<SkinStoreDataStructured[]> => {
+  const notion = new Client({ auth: notionSecret });
+  const notionStoreDataBaseld = process.env.NOTION_SKIN_STORE_DATABASE_ID;
+  const query = await notion.databases.query({
+    database_id: notionStoreDataBaseld,
+  });
+  const rows = query.results.map((res) => (res as any).properties);
+  const storeDataStructured = rows.map((row) => ({
+    item_id: row.item_id.unique_id.number || 0,
+    skin_name: row.skin_name.title?.[0]?.text?.content ?? "Default Name",
+    weapon_name:
+      row.weapon_name.rich_text
+        .map((richText) => richText.text.content)
+        .filter((content) => content.trim() !== "")
+        .join(" ") || "Default Description",
+    image_src: row.image_src?.url ?? "URL not available",
+    price: row.price.number || 0,
+    float: parseFloat(row.float.number.toFixed(5)) || 0,
+    rarity: extractMultiSelectNames(row.rarity),
+    weapon_type: extractMultiSelectNames(row.weapon_type),
+    startrack: extractMultiSelectNames(row.startrack),
+  })) as SkinStoreDataStructured[];
+  return storeDataStructured;
+};
+export const getSkinsItemsById = async (
+  items_id: number[]
+): Promise<SkinStoreDataStructured[]> => {
+  const notion = new Client({ auth: notionSecret });
+  const notionStoreDataBaseld = process.env.NOTION_SKIN_STORE_DATABASE_ID;
+  const query = await notion.databases.query({
+    database_id: notionStoreDataBaseld,
+    filter: {
+      or: items_id.map((id) => ({
+        property: "item_id",
+        number: {
+          equals: id,
+        },
+      })),
+    },
+  });
+  const rows = query.results.map((res) => (res as any).properties);
+  const storeDataStructured = rows.map((row) => ({
+    item_id: row.item_id.unique_id.number || 0,
+    skin_name: row.skin_name.title?.[0]?.text?.content ?? "Default Name",
+    weapon_name:
+      row.weapon_name.rich_text
+        .map((richText) => richText.text.content)
+        .filter((content) => content.trim() !== "")
+        .join(" ") || "Default Description",
+    image_src: row.image_src?.url ?? "URL not available",
+    price: row.price.number || 0,
+    float: parseFloat(row.float.number.toFixed(5)) || 0,
+    rarity: extractMultiSelectNames(row.rarity),
+    weapon_type: extractMultiSelectNames(row.weapon_type),
+    startrack: extractMultiSelectNames(row.startrack),
+  })) as SkinStoreDataStructured[];
+
+  return storeDataStructured;
+};
+export const getSummaryPriceOfSkins = async (
+  items_id: number[]
+): Promise<number> => {
+  const totalPrice = (await getSkinsItemsById(items_id)).reduce(
+    (accum, curVal) => curVal.price + accum,
+    0
+  );
+
+  return totalPrice;
+};

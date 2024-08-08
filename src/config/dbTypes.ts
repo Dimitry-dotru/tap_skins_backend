@@ -60,6 +60,7 @@ export type SkinStoreOrders = {
   user_id: number;
   skin_store_orders_ids: string;
   skin_store_items_cart_ids: string;
+  order_date: number;
 };
 
 // Multi_select

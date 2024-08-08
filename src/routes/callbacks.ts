@@ -2,7 +2,6 @@ import { Request, Response } from "express";
 import { Client } from "@notionhq/client";
 import {
   RowTaskStore,
-  SkinStoreDataStructured,
   SkinStoreOrders,
   TaskStoreDataStructured,
   TelegramUser,
@@ -10,9 +9,13 @@ import {
 
 import {
   checkingInitData,
+  clearUsersCart,
   extractFileUrls,
   extractMultiSelectNames,
   getRewards,
+  getSkinsItemsById,
+  getSkinsList,
+  getSummaryPriceOfSkins,
 } from "../utils/functions";
 import { bot, connection } from "../index";
 import { User } from "../config/dbTypes";
@@ -109,7 +112,6 @@ export const authUser = async (req: Request, res: Response) => {
       .json({ error: "Invalid init data format or error to create user" });
   }
 };
-
 export const userSubscription = async (req: Request, res: Response) => {
   const { user_id, channelId } = req.body;
   try {
@@ -148,7 +150,6 @@ export const userSubscription = async (req: Request, res: Response) => {
     }
   }
 };
-
 export const convertBalance = async (req: Request, res: Response) => {
   const exchangeCoeff = 10000;
   const init_data = req.body.initData;
@@ -194,43 +195,46 @@ export const convertBalance = async (req: Request, res: Response) => {
 };
 
 export const getSkins = async (req: Request, res: Response) => {
-  const notion = new Client({ auth: notionSecret });
-  const notionStoreDataBaseld = process.env.NOTION_SKIN_STORE_DATABASE_ID;
+  const maxHoursToStoreCart = 3;
 
   try {
-    const query = await notion.databases.query({
-      database_id: notionStoreDataBaseld,
-    });
-
-    const rows = query.results.map((res) => (res as any).properties);
-    const storeDataStructured = rows.map((row) => ({
-      item_id: row.item_id.unique_id.number || 0,
-      skin_name: row.skin_name.title?.[0]?.text?.content ?? "Default Name",
-      weapon_name:
-        row.weapon_name.rich_text
-          .map((richText) => richText.text.content)
-          .filter((content) => content.trim() !== "")
-          .join(" ") || "Default Description",
-      image_src: row.image_src?.url ?? "URL not available",
-      price: row.price.number || 0,
-      float: parseFloat(row.float.number.toFixed(5)) || 0,
-      rarity: extractMultiSelectNames(row.rarity),
-      weapon_type: extractMultiSelectNames(row.weapon_type),
-      startrack: extractMultiSelectNames(row.startrack),
-    })) as SkinStoreDataStructured[];
+    const storeDataStructured = await getSkinsList();
 
     const [response] = await connection.query(
-      "SELECT user_id, skin_store_orders_ids, skin_store_items_cart_ids FROM users"
+      "SELECT user_id, skin_store_orders_ids, skin_store_items_cart_ids, order_date FROM users"
     );
     const users = response as SkinStoreOrders[];
 
     for (const user of users) {
-      const itemsId = user.skin_store_orders_ids.split(",");
+      if (
+        user.skin_store_orders_ids.trim() === "" &&
+        user.skin_store_items_cart_ids.trim() === ""
+      )
+        continue;
 
-      // const cartIds =
-      // itemsId.push(user.skin_store_items_cart_ids.split(","));
+      if (
+        user.order_date !== 0 &&
+        (Date.now() - user.order_date) / (1000 * 60 * 60) >= maxHoursToStoreCart
+      ) {
+        user.skin_store_items_cart_ids = "";
+        await clearUsersCart(user.user_id);
+      }
 
-      itemsId.forEach((id) => {
+      const cartIds = (
+        user.skin_store_items_cart_ids.trim() === ""
+          ? []
+          : JSON.parse(user.skin_store_items_cart_ids)
+      ) as number[];
+
+      const orderIds = (
+        user.skin_store_orders_ids.trim() === ""
+          ? []
+          : JSON.parse(user.skin_store_orders_ids)
+      ) as number[];
+
+      const totalIds = cartIds.concat(orderIds);
+
+      totalIds.forEach((id) => {
         const itemId = storeDataStructured.findIndex(
           (el) => el.item_id === Number(id)
         );
@@ -251,7 +255,7 @@ export const getSkins = async (req: Request, res: Response) => {
 };
 export const addToCartHandle = async (req: Request, res: Response) => {
   try {
-    const item_id = req.params.item_id;
+    const item_id = parseInt(req.params.item_id);
     const init_data = req.body.initData;
 
     const user_id = (checkingInitData(init_data, res) as any).id;
@@ -259,17 +263,43 @@ export const addToCartHandle = async (req: Request, res: Response) => {
     try {
       const usersOrders = (
         await connection.query(
-          `SELECT skin_store_items_cart_ids, user_id FROM users`
+          `SELECT skin_store_items_cart_ids, user_id, skin_store_orders_ids, balance_purple FROM users`
         )
-      )[0] as { skin_store_items_cart_ids: string; user_id: number }[];
+      )[0] as {
+        skin_store_orders_ids: string;
+        skin_store_items_cart_ids: string;
+        user_id: number;
+        balance_purple: number;
+      }[];
 
+      // Проверяем не лежит ли товар уже у кого-то, или занят тем же пользователем
       for (const order of usersOrders) {
-        const idsArr = order.skin_store_items_cart_ids.split(",");
+        if (
+          order.skin_store_orders_ids.trim() === "" &&
+          order.skin_store_items_cart_ids.trim() === ""
+        )
+          continue;
 
-        if (idsArr.find((el) => parseInt(el) === parseInt(item_id))) {
+        const cartIds = (
+          order.skin_store_items_cart_ids.trim() === ""
+            ? []
+            : JSON.parse(order.skin_store_items_cart_ids)
+        ) as number[];
+        const orderIds = (
+          order.skin_store_orders_ids.trim() === ""
+            ? []
+            : JSON.parse(order.skin_store_orders_ids)
+        ) as number[];
+
+        const totalIds = cartIds.concat(orderIds);
+
+        if (totalIds.find((el) => el === item_id)) {
           return res.json({
             success: false,
-            message: "This item is taken by some user!",
+            message:
+              order.user_id === user_id
+                ? "Item already in the cart!"
+                : "This item is taken by some user!",
           });
         }
       }
@@ -284,13 +314,27 @@ export const addToCartHandle = async (req: Request, res: Response) => {
         });
       }
 
-      const list = usersCart.skin_store_items_cart_ids.split(",");
-      if (list[0].trim() === "") list[0] = item_id;
-      else list.push(item_id);
+      // добавляем в корзину товар
+      const list =
+        usersCart.skin_store_items_cart_ids.trim() === ""
+          ? []
+          : JSON.parse(usersCart.skin_store_items_cart_ids);
 
-      usersCart.skin_store_items_cart_ids = list.join(",");
+      list.push(item_id);
+
+      const totalPrice = await getSummaryPriceOfSkins(list);
+
+      if (usersCart.balance_purple < totalPrice) {
+        return res.json({
+          message: "Not enough balance!",
+          success: false,
+        });
+      }
+
+      usersCart.skin_store_items_cart_ids = JSON.stringify(list);
+
       await connection.query(
-        `UPDATE users SET skin_store_orders_ids="${
+        `UPDATE users SET skin_store_items_cart_ids="${
           usersCart.skin_store_items_cart_ids
         }", order_date=${Date.now()} WHERE user_id=${user_id}`
       );
@@ -313,6 +357,65 @@ export const addToCartHandle = async (req: Request, res: Response) => {
       message: "Unable to auth!",
       success: false,
       details: error,
+    });
+  }
+};
+export const getCartHandle = async (req: Request, res: Response) => {
+  try {
+    const initData = req.query;
+    const user = checkingInitData(initData, res);
+    const maxCartHoursHolding = 3;
+
+    try {
+      const user_id = user.id;
+
+      const usersCart = (
+        await connection.query(
+          `SELECT order_date, skin_store_items_cart_ids FROM users WHERE user_id=${user_id}`
+        )
+      )[0][0] as {
+        order_date: number;
+        skin_store_items_cart_ids: string;
+      };
+
+      // если у пользователя товары лежат уже слишком долго
+      if (
+        (Date.now() - usersCart.order_date) / (1000 * 60 * 60) >
+        maxCartHoursHolding
+      ) {
+        await clearUsersCart(user_id);
+        return {
+          message: "The items have been in the cart for too long!",
+          success: false,
+        };
+      }
+
+      const itemsIdsInCart =
+        usersCart.skin_store_items_cart_ids.trim() === ""
+          ? []
+          : JSON.parse(usersCart.skin_store_items_cart_ids);
+
+      const itemsInCart = await getSkinsItemsById(itemsIdsInCart);
+
+      return res.json({
+        items: itemsInCart,
+        message: "Cart successfully loaded!",
+        success: true
+      })
+    } catch (e) {
+      console.log("Error with connection to db!", e);
+      return res.status(500).json({
+        message: "Some error occured, try again later",
+        success: false,
+        details: e,
+      });
+    }
+  } catch (e) {
+    console.log("Error to get user's cart", e);
+    return res.status(500).json({
+      message: "Some error occured, try again later",
+      success: false,
+      details: e,
     });
   }
 };
@@ -368,7 +471,6 @@ export const removeFromCartHandle = async (req: Request, res: Response) => {
     });
   }
 };
-
 export const checkSkins = async (req: Request, res: Response) => {
   const skinIds = (req.body.skinIds as string).split(",");
   const initData = req.body.initData;
@@ -475,7 +577,6 @@ export const reward = async (req: Request, res: Response) => {
     });
   }
 };
-
 export const dailyReward = async (req: Request, res: Response) => {
   const initData = req.body.initData;
   const dailyBonusReward = {
@@ -535,7 +636,6 @@ export const dailyReward = async (req: Request, res: Response) => {
     });
   }
 };
-
 export const getTasks = async (req: Request, res: Response) => {
   // console.log(req.query);
   const notionStoreDataBaseld = process.env.NOTION_TASK_STORE_DATABASE_ID;
@@ -543,13 +643,11 @@ export const getTasks = async (req: Request, res: Response) => {
 
   // Проверка наличия необходимых переменных окружения
   if (!notionSecret || !notionStoreDataBaseld) {
-    return res
-      .status(500)
-      .json({
-        success: false,
-        message: "Error getting tasks",
-        details: "No db secrets",
-      });
+    return res.status(500).json({
+      success: false,
+      message: "Error getting tasks",
+      details: "No db secrets",
+    });
   }
 
   const user = checkingInitData(req.query, res) as TelegramUser;
@@ -598,13 +696,11 @@ export const getTasks = async (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    return res
-      .status(500)
-      .json({
-        succcess: false,
-        message: "Some error occured!",
-        details: error,
-      });
+    return res.status(500).json({
+      succcess: false,
+      message: "Some error occured!",
+      details: error,
+    });
   }
 };
 
