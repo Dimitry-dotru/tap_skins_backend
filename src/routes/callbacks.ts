@@ -41,78 +41,80 @@ export const authUser = async (req: Request, res: Response) => {
   try {
     const userInfo = checkingInitData(init_data, res) as any;
 
-    if (userInfo) {
-      // вернем тут объект юзера
-      const user_id = userInfo.id;
-      const [response] = await connection.query<any[]>(
-        `SELECT balance_common, balance_purple, user_id, last_daily_bonus_time_clicked, invited_users, last_click, stamina FROM users WHERE user_id=${user_id}`
-      );
+    if (!userInfo) {
+      console.log("Invalid!");
+      return res.status(403).json({ success: false, message: "Invalid" });
+    }
 
-      // создаем пользователя....
-      let addReferalBonus: boolean = false;
-      if (!response || !response.length) {
-        if (referalManId) {
-          try {
-            // находим человека, который дал реферальную ссылку
-            const referalMan = (await connection.query(
-              `SELECT * FROM users WHERE user_id=${referalManId}`
-            )[0][0]) as User;
+    const [response] = await connection.query<any[]>(
+      `SELECT balance_common, balance_purple, user_id, last_daily_bonus_time_clicked, invited_users, last_click, stamina FROM users WHERE user_id=${userInfo.id}`
+    );
 
-            referalMan.balance_common += referalManBonus.common;
-            referalMan.balance_purple += referalManBonus.purple;
-
-            referalMan.invited_users += 1;
-
-            await connection.query(
-              `UPDATE users SET balance_common=${referalMan.balance_common}, balance_purple=${referalMan.balance_purple}, invited_users=${referalMan.invited_users} WHERE user_id=${referalManId}`
-            );
-
-            addReferalBonus = true;
-          } catch (e) {
-            console.log("Error with searching referal man!", e);
-          }
-        }
-
-        const createUserQuery = `INSERT INTO users (balance_common, balance_purple, user_id, last_daily_bonus_time_clicked, invited_users, last_click, stamina) VALUES (${
-          addReferalBonus ? bonus.common : 0
-        }, ${addReferalBonus ? bonus.purple : 0}, ${user_id}, 0, 0, 0, 1000)`;
-
+    let addReferalBonus: boolean = false;
+    if (!response || !response.length) {
+      if (referalManId) {
         try {
-          await connection.query(createUserQuery);
+          const referalMan = (
+            await connection.query(
+              `SELECT * FROM users WHERE user_id=${referalManId}`
+            )
+          )[0][0] as User;
+
+          referalMan.balance_common += referalManBonus.common;
+          referalMan.balance_purple += referalManBonus.purple;
+          referalMan.invited_users += 1;
+
+          await connection.query(
+            `UPDATE users SET balance_common=${referalMan.balance_common}, balance_purple=${referalMan.balance_purple}, invited_users=${referalMan.invited_users} WHERE user_id=${referalManId}`
+          );
+
+          addReferalBonus = true;
         } catch (e) {
-          console.log("Error to create new user!");
-          return res.send(500).json({ message: e, success: false });
+          console.log("Error with searching referal man!", e);
+          return res
+            .status(500)
+            .json({ message: "Error with referal bonus", success: false });
         }
-
-        const [newUser] = await connection.query<any[]>(
-          `SELECT * FROM users WHERE user_id=${user_id}`
-        );
-
-        return res.json({
-          user: newUser[0],
-          success: true,
-          bonus: addReferalBonus ? bonus : null,
-        });
       }
 
-      // возвращаем пользователя из бд
-      const user = response[0] as User;
+      const createUserQuery = `INSERT INTO users (balance_common, balance_purple, user_id, last_daily_bonus_time_clicked, invited_users, last_click, stamina) VALUES (${
+        addReferalBonus ? bonus.common : 0
+      }, ${addReferalBonus ? bonus.purple : 0}, ${userInfo.id}, 0, 0, 0, 1000)`;
+
+      try {
+        await connection.query(createUserQuery);
+      } catch (e) {
+        console.log("Error to create new user!", e);
+        return res
+          .status(500)
+          .json({ message: "Error to create new user", success: false });
+      }
+
+      const [newUser] = await connection.query<any[]>(
+        `SELECT * FROM users WHERE user_id=${userInfo.id}`
+      );
+
       return res.json({
-        user,
+        user: newUser[0],
         success: true,
-        bonus: null,
+        bonus: addReferalBonus ? bonus : null,
       });
-    } else {
-      console.log("Invalid!");
-      res.status(403).json({ success: false, message: "Invalid" });
     }
+
+    const user = response[0] as User;
+    return res.json({
+      user,
+      success: true,
+      bonus: null,
+    });
   } catch (error) {
     console.log(error);
-    res
+    return res
       .status(400)
       .json({ error: "Invalid init data format or error to create user" });
   }
 };
+
 export const userSubscription = async (req: Request, res: Response) => {
   const { user_id, channelId } = req.body;
   try {
