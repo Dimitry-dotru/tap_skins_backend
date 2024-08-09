@@ -17,6 +17,7 @@ import {
   getSkinsItemsById,
   getSkinsList,
   getSummaryPriceOfSkins,
+  getTasksById,
 } from "../utils/functions";
 import { bot, connection } from "../index";
 import { User } from "../config/dbTypes";
@@ -403,8 +404,8 @@ export const getCartHandle = async (req: Request, res: Response) => {
       return res.json({
         items: itemsInCart,
         message: "Cart successfully loaded!",
-        success: true
-      })
+        success: true,
+      });
     } catch (e) {
       console.log("Error with connection to db!", e);
       return res.status(500).json({
@@ -447,16 +448,20 @@ export const removeFromCartHandle = async (req: Request, res: Response) => {
       if (usersCart.skin_store_items_cart_ids.trim() === "") {
         return res.json({
           success: false,
-          message: "Cart is already empty!"
+          message: "Cart is already empty!",
         });
       }
-      const list = JSON.parse(usersCart.skin_store_items_cart_ids).filter((el) => parseInt(el) !== parseInt(item_id));
+      const list = JSON.parse(usersCart.skin_store_items_cart_ids).filter(
+        (el) => parseInt(el) !== parseInt(item_id)
+      );
 
       if (!list.length) {
         await clearUsersCart(user_id);
       }
 
-      usersCart.skin_store_items_cart_ids = list.length ? JSON.stringify(list) : "";
+      usersCart.skin_store_items_cart_ids = list.length
+        ? JSON.stringify(list)
+        : "";
       await connection.query(
         `UPDATE users SET skin_store_items_cart_ids="${usersCart.skin_store_items_cart_ids}" WHERE user_id=${user_id}`
       );
@@ -648,7 +653,6 @@ export const dailyReward = async (req: Request, res: Response) => {
   }
 };
 export const getTasks = async (req: Request, res: Response) => {
-  // console.log(req.query);
   const notionStoreDataBaseld = process.env.NOTION_TASK_STORE_DATABASE_ID;
   const notion = new Client({ auth: notionSecret });
 
@@ -684,13 +688,13 @@ export const getTasks = async (req: Request, res: Response) => {
       })
     );
 
-    const completedTasks = (
+    const response = (
       await connection.query(
         `SELECT completed_tasks_ids FROM users WHERE user_id=${user_id}`
       )
-    )[0][0].completed_tasks_ids.split(",") as string[];
+    )[0][0].completed_tasks_ids;
 
-    if (completedTasks[0].trim() === "") completedTasks.shift();
+    const completedTasks = response.trim() === "" ? [] : JSON.parse(response);
 
     const unCompletedTasks: TaskStoreDataStructured[] =
       taskStoreDataStructured.filter((el) => {
@@ -699,7 +703,7 @@ export const getTasks = async (req: Request, res: Response) => {
         );
       });
 
-    return res.status(200).json({
+    return res.json({
       unCompletedTasks,
       tasks: {
         completed: completedTasks.length,
@@ -714,77 +718,84 @@ export const getTasks = async (req: Request, res: Response) => {
     });
   }
 };
+export const checkRewardForTasks = async (req: Request, res: Response) => {
+  // вернет список заданий, за которые нужно получить награду
+  // возвращаемый формат:
+  // {
+  //   success: boolean,
+  //   rewardsClaimed: {
+  //     purple: number,
+  //     yellow: number,
+  //   }
+  //   message: string
+  // }
+  try {
+    const initData = req.query;
+    const user = checkingInitData(initData, res);
+    const user_id = user.id;
+    const rewardsForUser = (
+      await connection.query(
+        `SELECT tasks_to_claim, balance_common, balance_purple FROM users WHERE user_id=${user_id}`
+      )
+    )[0][0] as {
+      tasks_to_claim: string;
+      balance_purple: number;
+      balance_common: number;
+    };
 
-// async function getRewards() {
-//   const user_id = 16123123;
+    if (rewardsForUser.tasks_to_claim.trim() === "") {
+      // нечего получать
+      return res.json({
+        message: "",
+        success: true,
+        rewardsClaimed: {
+          purple: 0,
+          yellow: 0,
+        },
+      });
+    }
 
-//   // Извлечение имен из мультиселектов
-//   function extractMultiSelectNames(options: {
-//     multi_select: MultiSelectOption[];
-//   }): string {
-//     return options.multi_select.map((option) => option.name).join(", ");
-//   }
+    const completedTasks = JSON.parse(
+      rewardsForUser.tasks_to_claim
+    ) as number[];
+    const allTasks = await getTasksById(completedTasks);
 
-//   // Извлечение только URL из объекта files
-//   function extractFileUrls(
-//     files: { name: string; file: { url: string } }[]
-//   ): string {
-//     return files.map((file) => file.file.url).join(", ");
-//   }
+    const reward = {
+      purple: allTasks.reduce((acc, cur) => {
+        return (acc += cur.reward_type === "purple_coin" ? cur.reward : 0);
+      }, 0),
+      yellow: allTasks.reduce((acc, cur) => {
+        return (acc += cur.reward_type === "yellow_coin" ? cur.reward : 0);
+      }, 0),
+    };
 
-//   const notionSecret = process.env.NOTION_SECRET;
-//   const notionStoreDataBaseld =
-//     process.env.NOTION_REFERAL_REWARD_STORE_DATABASE_ID;
-//   const notion = new Client({ auth: notionSecret });
+    try {
+      await connection.query(
+        `UPDATE users SET balance_common=${(rewardsForUser.balance_common +=
+          reward.yellow)}, balance_purple=${(rewardsForUser.balance_purple +=
+          reward.purple)}, tasks_to_claim='' WHERE user_id=${user_id}`
+      );
+    } catch (error) {
+      console.log(error);
+      // вернуть сообщение о том что награда не была получена
+      return res.status(500).json({
+        message: "Error with the server, try again later",
+        success: false,
+        details: error,
+      });
+    }
 
-//   // Проверка наличия необходимых переменных окружения
-//   if (!notionSecret || !notionStoreDataBaseld) {
-//     // res.status(500).json({ error: "Missing notion secret or DB-ID." });
-//     return;
-//   }
-
-//   try {
-//     const query = await notion.databases.query({
-//       database_id: notionStoreDataBaseld,
-//     });
-
-//     const rows = query.results.map(
-//       (res) => (res as any).properties
-//     ) as RowReferal[];
-
-//     const referalRewardStoreStructured: ReferalRewardStoreDataStructured[] =
-//       rows.map((row) => ({
-//         reward_id: row.reward_id.unique_id.number || 0,
-//         reward_name:
-//           row.reward_name.title?.[0]?.text?.content ?? "Default Name",
-//         reward_type: extractMultiSelectNames(row.reward_type),
-//         referal_amount: row.referal_amount.number || 0,
-//         reward: row.reward.number || 0,
-//         referal_icon: extractFileUrls(row.referal_icon.files),
-//       }));
-
-//     const claimedUsersRewards: { user_id: number; claimed_referals: string }[] =
-//       (
-//         await connection.query(
-//           `SELECT * FROM claimed_referals WHERE user_id=${user_id}`
-//         )
-//       )[0] as any;
-
-//     if (claimedUsersRewards.length) {
-//       const claimedIds = claimedUsersRewards[0].claimed_referals.split(",");
-//       referalRewardStoreStructured.map((el) => {
-//         const completed =
-//           claimedIds.findIndex((id) => parseInt(id) === el.reward_id) !== -1;
-//           console.log({ ...el, completed: completed });
-//         return { ...el, completed: completed };
-//       });
-//     }
-
-//     // console.log(referalRewardStoreStructured);
-
-//     // res.json({ referalRewardStoreStructured });
-//   } catch (error) {
-//     console.log(error);
-//     // res.status(500).json({ error: "Failed to fetch data from Notion" });
-//   }
-// }
+    return res.json({
+      message: "Success!",
+      success: true,
+      rewardsClaimed: reward,
+    });
+  } catch (e) {
+    console.log(e);
+    return res.status(500).json({
+      message: "Error with the server, try again later",
+      success: false,
+      details: e,
+    });
+  }
+};

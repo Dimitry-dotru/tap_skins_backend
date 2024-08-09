@@ -35,6 +35,7 @@ app.use(express.json());
 app.use(bodyParser.json());
 app.use(express.urlencoded({ extended: false }));
 
+
 const wss = new WebSocket.Server({ port: Number(websocketPort) });
 
 let connection: null | mysql.Connection = null;

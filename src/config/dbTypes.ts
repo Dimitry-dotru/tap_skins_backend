@@ -18,6 +18,7 @@
 export interface TaskStoreDataStructured {
   task_id: number;
   task_name: string;
+  reward: number;
   platform_type: string;
   reward_type: string;
   link_to_join: string;

@@ -8,7 +8,6 @@ import {
   MultiSelectOption,
   ReferalRewardStoreDataStructured,
   RowReferal,
-  RowTaskStore,
   SkinStoreDataStructured,
   TaskStoreDataStructured,
 } from "../config/dbTypes";
@@ -170,6 +169,39 @@ export const getSummaryPriceOfSkins = async (
 
   return totalPrice;
 };
+
+export const getTasksById = async (tasks_id: number[]) => {
+  if (!tasks_id.length) return [];
+  const notion = new Client({ auth: notionSecret });
+  const notionStoreDataBaseld = process.env.NOTION_TASK_STORE_DATABASE_ID;
+  const query = await notion.databases.query({
+    database_id: notionStoreDataBaseld,
+    filter: {
+      or: tasks_id.map((id) => ({
+        property: "task_id",
+        number: {
+          equals: id,
+        },
+      })),
+    },
+  });
+  const rows = query.results.map((res) => (res as any).properties);
+  const tasksDataStructured = rows.map((row) => ({
+    task_id: row.task_id.unique_id.number || 0,
+    task_name: row.task_name.title?.[0]?.text?.content ?? "Default Name",
+    platform_type: extractMultiSelectNames(row.platform_type),
+    reward_type: extractMultiSelectNames(row.reward_type),
+    reward: row.reward.number || 0,
+    link_to_join: row.link_to_join?.url ?? "URL not available",
+    social_icon: extractFileUrls(row.social_icon.files),
+  })) as TaskStoreDataStructured[];
+
+  return tasksDataStructured;
+};
+
+export const completeTask = async () => {
+  
+}
 
 export async function getConfig(
   connection: Connection
