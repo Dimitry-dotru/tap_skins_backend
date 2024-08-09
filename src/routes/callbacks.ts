@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { Client } from "@notionhq/client";
+import { config } from "../index";
 import {
   RowTaskStore,
   SkinStoreOrders,
@@ -195,7 +196,7 @@ export const convertBalance = async (req: Request, res: Response) => {
 };
 
 export const getSkins = async (req: Request, res: Response) => {
-  const maxHoursToStoreCart = 3;
+  const maxHoursToStoreCart = config.cart_holding_time;
 
   try {
     const storeDataStructured = await getSkinsList();
@@ -364,7 +365,7 @@ export const getCartHandle = async (req: Request, res: Response) => {
   try {
     const initData = req.query;
     const user = checkingInitData(initData, res);
-    const maxCartHoursHolding = 3;
+    const maxCartHoursHolding = config.cart_holding_time;
 
     try {
       const user_id = user.id;
@@ -429,9 +430,9 @@ export const removeFromCartHandle = async (req: Request, res: Response) => {
     try {
       const usersCart = (
         await connection.query(
-          `SELECT skin_store_orders_ids, user_id FROM users WHERE user_id=${user_id}`
+          `SELECT skin_store_items_cart_ids, user_id FROM users WHERE user_id=${user_id}`
         )
-      )[0][0] as { skin_store_orders_ids: string; user_id: number };
+      )[0][0] as { skin_store_items_cart_ids: string; user_id: number };
 
       if (!usersCart) {
         console.log("Can't find user with id " + user_id);
@@ -441,13 +442,21 @@ export const removeFromCartHandle = async (req: Request, res: Response) => {
         });
       }
 
-      const list = usersCart.skin_store_orders_ids
-        .split(",")
-        .filter((el) => parseInt(el) !== parseInt(item_id));
+      if (usersCart.skin_store_items_cart_ids.trim() === "") {
+        return res.json({
+          success: false,
+          message: "Cart is already empty!"
+        });
+      }
+      const list = JSON.parse(usersCart.skin_store_items_cart_ids).filter((el) => parseInt(el) !== parseInt(item_id));
 
-      usersCart.skin_store_orders_ids = list.join(",");
+      if (!list.length) {
+        await clearUsersCart(user_id);
+      }
+
+      usersCart.skin_store_items_cart_ids = list.length ? JSON.stringify(list) : "";
       await connection.query(
-        `UPDATE users SET skin_store_orders_ids="${usersCart.skin_store_orders_ids}" WHERE user_id=${user_id}`
+        `UPDATE users SET skin_store_items_cart_ids="${usersCart.skin_store_items_cart_ids}" WHERE user_id=${user_id}`
       );
 
       return res.json({

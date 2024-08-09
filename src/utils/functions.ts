@@ -2,7 +2,9 @@ import { parse } from "querystring";
 import { botToken, connection } from "../index";
 import { createHmac } from "crypto";
 import { Response } from "express";
+import { Connection } from "mysql2/promise";
 import {
+  ConfigFields,
   MultiSelectOption,
   ReferalRewardStoreDataStructured,
   RowReferal,
@@ -125,6 +127,7 @@ export const getSkinsList = async (): Promise<SkinStoreDataStructured[]> => {
 export const getSkinsItemsById = async (
   items_id: number[]
 ): Promise<SkinStoreDataStructured[]> => {
+  if (!items_id.length) return [];
   const notion = new Client({ auth: notionSecret });
   const notionStoreDataBaseld = process.env.NOTION_SKIN_STORE_DATABASE_ID;
   const query = await notion.databases.query({
@@ -167,3 +170,18 @@ export const getSummaryPriceOfSkins = async (
 
   return totalPrice;
 };
+
+export async function getConfig(
+  connection: Connection
+): Promise<ConfigFields | null> {
+  try {
+    const fields = (
+      await connection.query("SELECT * FROM config")
+    )[0][0] as ConfigFields;
+
+    return fields;
+  } catch (e) {
+    console.log(e);
+    return null;
+  }
+}

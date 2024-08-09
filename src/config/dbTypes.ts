@@ -181,6 +181,12 @@ export type TelegramUser = {
   allows_write_to_pm: boolean;
 };
 
+export type ConfigFields = {
+  cart_holding_time: number;
+  yellow_coin_per_tap: number;
+  max_user_stamina: number;
+}
+
 //! USER
 // const userSchema = new mongoose.Schema({
 //   balance_common: Number,

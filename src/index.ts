@@ -6,6 +6,8 @@ import WebSocket from "ws";
 import { onConnect } from "./config/websocket";
 import mysql from "mysql2/promise";
 dotenv.config({ path: "./.env" });
+import { getConfig } from "./utils/functions";
+import { ConfigFields } from "./config/dbTypes";
 const {
   serverPort,
   botToken,
@@ -36,6 +38,7 @@ app.use(express.urlencoded({ extended: false }));
 const wss = new WebSocket.Server({ port: Number(websocketPort) });
 
 let connection: null | mysql.Connection = null;
+let config: null | ConfigFields = null;
 (async function startServer() {
   // DB connection
   try {
@@ -52,6 +55,16 @@ let connection: null | mysql.Connection = null;
   console.log("Connected to db successfully!");
   app.listen(serverPort, async () => {
     console.log(`Server port: ${serverPort}\n`);
+    config = await getConfig(connection);
+    if (!config) {
+      const defaulParams: ConfigFields = {
+        cart_holding_time: 24,
+        yellow_coin_per_tap: 1,
+        max_user_stamina: 1000,
+      };
+      console.log("No config available");
+      config = defaulParams;
+    }
     bot.launch();
     wss.on("connection", onConnect);
   });
@@ -60,4 +73,4 @@ let connection: null | mysql.Connection = null;
 import "./config/bot";
 import "./config/websocket";
 import "./routes/index";
-export { bot, frontendLink, app, botToken, wss, connection };
+export { bot, frontendLink, app, botToken, wss, connection, config };
