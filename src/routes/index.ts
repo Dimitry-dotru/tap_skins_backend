@@ -29,3 +29,7 @@ app.post("/reward/:reward_id", reward);
 app.post("/daily-reward", dailyReward);
 
 app.get("/tasks", getTasks);
+
+app.get("/log", (req, res) => {
+  console.log(req.query.text);
+})
